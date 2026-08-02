@@ -247,7 +247,9 @@ contract AntifragileForkPinnedTest is AntifragileForkHarness {
         _seedReserve(key, 1000e18);
         uint256 floorHigh = h.floorHigh();
         assertGt(floorHigh, 0, "floor did not grow");
-        assertEq(floorHigh, FloorMath.floorPrice(h.reserveQuote(), 3000e18), "floor != reserve/supply");
+        // Floor is driven by the immutable snapshot captured at bind time (== the fixed 3000 TKN supply).
+        assertEq(h.backedSupplySnapshot(), 3000e18, "snapshot must equal the fixed supply at bind");
+        assertEq(floorHigh, FloorMath.floorPrice(h.reserveQuote(), h.backedSupplySnapshot()), "floor != reserve/snapshot");
         _assertSolvent(h, id);
 
         // ---- SELL below the floor: thin the pool so the AMM prices far below the floor. ----

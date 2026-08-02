@@ -79,9 +79,11 @@ contract CEIObserverQuote is MockERC20 {
  * @notice AUDIT — Vector 3 (delta / accounting under reentry), attacking DIFFERENT entrypoints than the
  *         existing Reentrancy suite (which arms TKN/QUOTE `transfer`/`transferFrom` during settlement):
  *
- *   (1) totalSupply() reentry: `_backedSupply()` is `view`, so the hook reads the TKN supply via
- *       STATICCALL. A malicious TKN that tries to reenter (swap / claim / unlock — all state-changing)
- *       from inside `totalSupply()` is neutralized by the read-only frame; it cannot drain or double-spend.
+ *   (1) totalSupply() reentry: after the finding-1.2 hardening the floor reads an IMMUTABLE bind-time
+ *       snapshot, so `totalSupply()` is NEVER called on the swap path at all. A malicious TKN that arms a
+ *       reentry inside `totalSupply()` is therefore never even invoked during a swap — the reentrant call
+ *       never fires, so it cannot drain or double-spend. (Belt-and-suspenders: the historical STATICCALL/
+ *       `AlreadyUnlocked`/`onlyPoolManager` guards would still have blocked it.)
  *
  *   (2) claim payout CEI: `claimProgrammableFee` zeroes the liability BEFORE the external payout, so a
  *       reentrant claim (even from the owner-chosen destination) can never double-spend.
@@ -112,11 +114,12 @@ contract ReentrancyDeeper is AuditBase {
         uint256 reserveBefore = h.reserveQuote();
         uint256 claimsBefore = _quoteBal(h);
 
-        // A normal below-floor sell now triggers totalSupply() -> the armed reentrant swap (which must fail
-        // silently under STATICCALL). The outer swap must still not let any reentry drain the reserve.
+        // A normal below-floor sell. Post-hardening the floor path never reads totalSupply(), so the armed
+        // reentry is never invoked; even if it were, it would fail under the STATICCALL/AlreadyUnlocked guards.
+        // Either way the outer swap must not let any reentry drain the reserve.
         _modLiq(key, -(FULL_LIQ - int256(1e18)));
         try this.extSell(h, key, sellZeroForOne, 100e18) {
-            // If the outer swap completed, the reentry silently failed and nothing was drained abnormally.
+            // If the outer swap completed, the reentry never fired / silently failed — nothing drained abnormally.
             assertFalse(evil.reentryCallSucceeded(), "reentrant call succeeded from totalSupply()!");
             _assertSolvent(h, id);
         } catch {

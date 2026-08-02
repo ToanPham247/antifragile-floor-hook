@@ -213,7 +213,10 @@ contract FloorHonorTest is Test, Deployers {
         _seedReserve(key, 1000e18);
         uint256 floorHigh = h.floorHigh();
         assertGt(floorHigh, 0, "floor not grown");
-        assertEq(floorHigh, FloorMath.floorPrice(h.reserveQuote(), 3000e18), "floor != reserve/supply");
+        // Floor is driven by the immutable snapshot captured at bind time (== live supply for this
+        // fixed-supply mock, but read from the snapshot to be explicit about the hardened source).
+        assertEq(h.backedSupplySnapshot(), 3000e18, "snapshot must equal the fixed supply at bind");
+        assertEq(floorHigh, FloorMath.floorPrice(h.reserveQuote(), h.backedSupplySnapshot()), "floor != reserve/snapshot");
 
         // Thin the pool so the AMM prices the sell FAR below the floor.
         _modLiq(key, -(FULL_LIQ - int256(1e18)));

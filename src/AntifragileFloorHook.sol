@@ -27,8 +27,10 @@ import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
  * @dev FLOOR SUMMARY ("top-up to floor" — Design A, decoupled from the fee; see docs/FLOOR.md):
  *
  *      The project slice of the fee accrues into `reserveQuote`. The floor price is
- *      `floorPrice(reserveQuote, backedSupply)` (QUOTE-per-TKN, WAD), where `backedSupply` is the TKN's
- *      circulating `totalSupply()`. `floorHigh` is a MONOTONIC high-water mark of that price. On an
+ *      `floorPrice(reserveQuote, backedSupply)` (QUOTE-per-TKN, WAD), where `backedSupply` is an
+ *      IMMUTABLE SNAPSHOT of the TKN's `totalSupply()` captured once at bind time (see {backedSupplySnapshot}
+ *      and {_afterInitialize}) — NOT a live read, so a malicious/rebasing/burn-anyone TKN can never move the
+ *      floor after init (closes audit finding 1.2). `floorHigh` is a MONOTONIC high-water mark of that price. On an
  *      EXACT-INPUT SELL (TKN in, QUOTE out) the AMM executes the swap first (the core AMM leg is
  *      never zero — this is NOT a custom curve); then {_afterSwap} subsidises the seller from the
  *      reserve up to the floor: `topUp = min(max(floorHigh*tknIn/1e18 - ammQuoteOut, 0), reserveQuote)`,
@@ -122,6 +124,16 @@ contract AntifragileFloorHook is BaseHook {
     /// @notice The bound canonical pool id. Set once in {_afterInitialize}.
     PoolId public poolId;
 
+    /// @notice IMMUTABLE-after-bind snapshot of the TKN `totalSupply()`, captured EXACTLY ONCE in
+    ///         {_afterInitialize} at bind time. This — never a live `totalSupply()` read — is the sole
+    ///         `backedSupply` fed to {FloorMath.floorPrice} (see {_backedSupply}). Freezing it at bind time
+    ///         closes audit finding 1.2: a malicious `burn-anyone` / negative-rebase TKN can no longer crater
+    ///         supply to spike the floor and over-extract the reserve. Solvency-safe in every case: if supply
+    ///         later inflates the snapshot understates it (floor slightly higher, but every top-up is still
+    ///         capped by `reserveQuote`); if supply later burns the snapshot overstates it (floor lower =
+    ///         safer). For a fixed-supply token snapshot == live, so the canonical case is unchanged.
+    uint256 public backedSupplySnapshot;
+
     /// @dev True once a canonical pool has been bound.
     bool private _bound;
 
@@ -141,7 +153,8 @@ contract AntifragileFloorHook is BaseHook {
     /// @dev After every swap `floorHigh = max(floorHigh, floorPrice(reserveQuote, backedSupply))`.
     ///      It is the ENFORCED top-up target; the actual payout is ALWAYS additionally capped by the
     ///      available `reserveQuote` (the floor never promises more QUOTE than the reserve holds).
-    ///      `backedSupply` is the TKN's circulating supply = `IERC20(tknCurrency).totalSupply()`.
+    ///      `backedSupply` is the IMMUTABLE {backedSupplySnapshot} taken at bind time (NOT a live
+    ///      `totalSupply()` read), so post-init supply changes can never influence the floor.
     uint256 public floorHigh;
 
     /* ------------------------------------------------------------------ */
@@ -225,7 +238,9 @@ contract AntifragileFloorHook is BaseHook {
 
     /**
      * @dev Binds the hook to its canonical pool. The pool MUST contain {quoteCurrency}; the other
-     *      side is stored as {tknCurrency}. Binding happens exactly once.
+     *      side is stored as {tknCurrency}. Binding happens exactly once — the `_bound` guard reverts
+     *      {PoolAlreadyBound} on any second init, so {backedSupplySnapshot} below is captured set-once
+     *      and is effectively immutable thereafter.
      */
     function _afterInitialize(address, PoolKey calldata key, uint160, int24)
         internal
@@ -237,8 +252,13 @@ contract AntifragileFloorHook is BaseHook {
         if (_bound) revert PoolAlreadyBound();
 
         _bound = true;
-        tknCurrency = key.currency0 == q ? key.currency1 : key.currency0;
+        Currency t = key.currency0 == q ? key.currency1 : key.currency0;
+        tknCurrency = t;
         poolId = key.toId();
+        // SECURITY (audit finding 1.2): snapshot the TKN supply ONCE, at bind time. The floor is driven by
+        // this frozen value forever after — never a live `totalSupply()` — so a malicious/rebasing TKN can
+        // never crater supply post-init to spike the floor and over-extract the reserve.
+        backedSupplySnapshot = IERC20(Currency.unwrap(t)).totalSupply();
         return IHooks.afterInitialize.selector;
     }
 
@@ -381,12 +401,15 @@ contract AntifragileFloorHook is BaseHook {
     }
 
     /**
-     * @dev The TKN circulating supply that backs the floor. We use the ERC20 `totalSupply()` of the
-     *      token side (documented choice: circulating == totalSupply for a token with no separate
-     *      escrow). A larger backed supply spreads the same reserve across more tokens => a lower floor.
+     * @dev The TKN supply that backs the floor. Returns the IMMUTABLE {backedSupplySnapshot} taken once at
+     *      bind time — NOT a live `totalSupply()` read. Freezing the denominator here removes the live call
+     *      from the floor path entirely, so a malicious / reentrant / rebasing `totalSupply()` cannot
+     *      influence the floor at all (audit finding 1.2). A larger backed supply spreads the same reserve
+     *      across more tokens => a lower floor; for a fixed-supply token the snapshot equals the live value,
+     *      so the canonical case is unchanged.
      */
     function _backedSupply() internal view returns (uint256) {
-        return IERC20(Currency.unwrap(tknCurrency)).totalSupply();
+        return backedSupplySnapshot;
     }
 
     /**

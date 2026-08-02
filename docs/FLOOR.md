@@ -28,13 +28,29 @@ floor      = FloorMath.floorPrice(reserveQuote, backedSupply)   // = reserveQuot
 floorHigh  = FloorMath.ratchet(floorHigh, floor)                // = max(floorHigh, floor)   — after EVERY swap
 ```
 
-* **`backedSupply` = `IERC20(tknCurrency).totalSupply()` (circulating).**
-  Documented choice: we treat the entire minted TKN supply as "backed". This is the **conservative**
-  reading — spreading the same reserve across the largest possible token count yields the **lowest**
-  (safest) floor. A token that later escrows/locks part of supply could pass a smaller `backedSupply`
-  for a *higher* floor; we deliberately do not, so the floor is never overstated. (If the token side
-  were a rebasing or fee-on-transfer token, `totalSupply` remains the right denominator because it is
-  what the reserve must be spread across.)
+* **`backedSupply` = `backedSupplySnapshot` — an IMMUTABLE snapshot of `totalSupply()` captured ONCE at
+  `_afterInitialize` (bind time), NOT a live read.**
+  At bind time the hook records `backedSupplySnapshot = IERC20(tknCurrency).totalSupply()` alongside
+  `tknCurrency`/`poolId`, set-once (the `PoolAlreadyBound` guard prevents any re-init/re-set). The floor
+  path then reads only this frozen value — the live `totalSupply()` call is removed from the floor
+  entirely.
+
+  **Why (security — closes audit finding 1.2).** A live `totalSupply()` let a malicious `burn-anyone` /
+  negative-rebase TKN crater the supply mid-transaction, spiking `floorHigh = reserveQuote·1e18/supply`,
+  then redeem an untouched bag against the illegitimate floor and over-extract the reserve. Freezing the
+  denominator at bind time makes the floor **immune to every post-init supply change** (mint, burn,
+  rebase, or even a reentrant/reverting `totalSupply()`), so that manipulation is impossible.
+
+  **Solvency-safe in every case** (the top-up is *always* additionally capped by `reserveQuote`):
+  - *Fixed-supply TKN (the canonical model):* snapshot == live — **no behavior change**; the floor value
+    is meaningful and honest, exactly as before.
+  - *Supply later inflates (mint):* the snapshot **understates** true supply → the floor is slightly
+    higher → more top-up, but still reserve-capped → solvency holds.
+  - *Supply later burns:* the snapshot **overstates** true supply → the floor is lower → strictly safer.
+
+  This keeps the original **conservative** reading (treat the whole minted supply as "backed" so the
+  floor is never overstated) while removing the live-supply attack surface. A token that escrows/locks
+  part of supply still does not get a higher floor; we deliberately snapshot the full minted supply.
 
 * **`floorHigh` is monotonic** (a high-water mark). It is the *enforced target*. Because we only ever
   `ratchet` (take the max), it can never decrease — not when a top-up drains the reserve, not when the

@@ -5,12 +5,15 @@ plausible attack, either a Foundry PoC proving a real bug (→ fix + regression)
 citing the exact invariant/line that stops it. This register feeds `THREAT_MODEL.md`.
 
 **Result:** no NEW in-model exploitable bug found. The prior CRITICAL reserve-drain (requested-vs-executed
-top-up, fixed at `cd2109a`) was re-probed for variants — none escape the fix. One **out-of-model** value
-attack (a malicious `burn-anyone` / rebasing TKN can spike `floorHigh` and over-extract the reserve) is
-mapped precisely with a PoC that also proves the damage is **bounded to the reserve — solvency and the
-platform liability always survive**. One **Low** lifecycle griefing (binding front-run) is documented.
+top-up, fixed at `cd2109a`) was re-probed for variants — none escape the fix. The one value attack that was
+previously out-of-model (a malicious `burn-anyone` / rebasing TKN can spike `floorHigh` and over-extract the
+reserve — finding 1.2) has since been **FIXED**: `backedSupply` is now an **immutable snapshot** captured
+once at `_afterInitialize`, so the live `totalSupply()` is removed from the floor path and no post-init
+supply change can move the floor (see finding 1.2 below and `docs/FLOOR.md`). One **Low** lifecycle griefing
+(binding front-run) is documented.
 
-Suite after this audit: **87 tests green** (73 pre-existing + **14 new** `test/audit/*`), incl. mainnet-fork.
+Suite after this audit + the 1.2 hardening: **88 tests green** (73 pre-existing + 14 `test/audit/*` +
+**1 new** positive floor-immunity test), incl. mainnet-fork.
 
 ---
 
@@ -20,7 +23,7 @@ Suite after this audit: **87 tests green** (73 pre-existing + **14 new** `test/a
 |---|---------------|----------|--------|----------------------------------|--------------------|
 | **1. Floor / reserve economics** |
 | 1.1 | Partial-fill top-up sized on *requested* not *executed* tkn (prior CRITICAL) | Critical | **exploitable-FIXED** (`cd2109a`) | `ReserveDrainRegression.*`; `_afterSwap` `execTknIn = tknDelta<0?..:0` (src L337-338, L352) | Top-up sized on executed `tknDelta`, never `|amountSpecified|`; regression + my `test_burnOwnSupply` re-assert the bound. |
-| 1.2 | Malicious/rebasing TKN craters `totalSupply` → spikes `floorHigh` → over-extract reserve | Medium (High-impact, out-of-model) | **out-of-model (documented)** | `TokenModelBoundary.test_adminBurnAnyone_overExtractsReserve_butSolventAndLiabilityIntact` | A `burn-anyone`/neg-rebase TKN lets a fractional holder drain ~98% of the reserve (294.3 vs 2.99 fair QUOTE) — but the top-up is still capped by `reserveQuote`, so **solvency + the 10bps liability survive** (§ Token assumptions). |
+| 1.2 | Malicious/rebasing TKN craters `totalSupply` → spikes `floorHigh` → over-extract reserve | Medium (High-impact) | **exploitable-FIXED (immutable backedSupply snapshot)** | `TokenModelBoundary.test_adminBurnAnyone_mitigatedByImmutableSnapshot_noOverExtraction` | Floor now reads an IMMUTABLE `backedSupplySnapshot` taken once at `_afterInitialize` — the live `totalSupply()` is removed from the floor path. Cratering supply no longer moves `floorHigh` (0.0598 → **0.0599**, not 5.9203) and the redemption is bounded to fair value (extraction **2.49** vs the pre-fix 294.3 QUOTE; reserve drain **0.82** vs 294.3). Solvency + the 10bps liability preserved as before (§ Token assumptions). |
 | 1.3 | Burn-your-own supply (ERC20Burnable) to over-redeem | Info | **mitigated (fix bound)** | `TokenModelBoundary.test_burnOwnSupply_topUpBoundedByExecutedFairValue` | Top-up ≤ `floorHigh*executedTkn/1e18`; burning your own tokens raises per-token floor but leaves fewer to redeem — net extraction only DROPS (algebra below). Not profitable. |
 | 1.4 | Supply inflation (mint) to grief the floor / drain | Low | **mitigated** | `TokenModelBoundary.test_mintInflateSupply_noDrain_floorMonotonic` | `floorHigh` is a monotonic max; inflation lowers the *candidate* but never ratchets down, and a buy/above-floor sell pays no subsidy → no drain. |
 | 1.5 | Donation / external inflation of `reserveQuote` besides fees | Info | **mitigated** | `OwnerReserveIsolation.test_noExternalReserveMutator`; `FeeBypassAndAccounting.test_erc6909Donation_inert_notStealable` | `reserveQuote` has NO external setter: rises only via the project fee slice, falls only via a below-floor sell top-up. An ERC-6909 claim donation inflates the raw balance but never `reserveQuote`/floor and is unstealable. |
@@ -46,15 +49,15 @@ Suite after this audit: **87 tests green** (73 pre-existing + **14 new** `test/a
 
 ---
 
-## The one out-of-model attack, in numbers (finding 1.2)
+## Finding 1.2 — the fix, in numbers (exploitable-FIXED)
 
-`floorPrice = reserveQuote · 1e18 / totalSupply(tkn)` and `floorHigh` ratchets it up monotonically. A TKN
-whose supply can be cut **without cutting the attacker's own balance** (admin `burn(anyone)`, negative
-rebase) lets a fractional holder permanently spike `floorHigh`, then redeem their untouched bag against the
-illegitimate floor:
+**The attack (BEFORE).** With a *live* `floorPrice = reserveQuote · 1e18 / totalSupply(tkn)` and a monotonic
+`floorHigh`, a TKN whose supply can be cut **without cutting the attacker's own balance** (admin
+`burn(anyone)`, negative rebase) let a fractional holder permanently spike `floorHigh`, then redeem their
+untouched bag against the illegitimate floor:
 
 ```
-PoC test_adminBurnAnyone_overExtractsReserve_butSolventAndLiabilityIntact:
+BEFORE (live totalSupply — exploitable):
   floorHigh (honest)      = 0.0598  QUOTE/TKN
   floorHigh (post-burn)   = 5.9203  QUOTE/TKN     (~99× spike from cratering supply)
   attacker TKN delivered  = 50 TKN
@@ -64,45 +67,72 @@ PoC test_adminBurnAnyone_overExtractsReserve_butSolventAndLiabilityIntact:
   reserve after attack    = 5.16   QUOTE
 ```
 
-The attacker turns 50 TKN worth **2.99 QUOTE** into **294.3 QUOTE** — a ~98× over-extraction of the shared
-reserve. **BUT** the PoC also proves the blast radius is bounded:
-* the top-up never exceeds `floorHigh · executedTkn / 1e18` (the cd2109a fix bound still holds);
+**The hardening.** `backedSupply` is now an **immutable `backedSupplySnapshot`** captured once at
+`_afterInitialize` (bind time); the live `totalSupply()` read is removed from the floor path entirely
+(`_backedSupply()` returns the snapshot). Cratering supply after init cannot move the floor at all.
+
+```
+AFTER (immutable snapshot — mitigated; PoC test_adminBurnAnyone_mitigatedByImmutableSnapshot_noOverExtraction):
+  snapshot supply (frozen at bind) = 5000 TKN
+  live supply after burn           = 50.6 TKN      (attacker STILL craters live supply ~99×)
+  floorHigh (honest / snapshot)    = 0.0598 QUOTE/TKN
+  floorHigh (post-burn)            = 0.0599 QUOTE/TKN   (UNCHANGED — moved only by this sell's own fee,
+                                                          NOT by the crater; the ~99× spike is gone)
+  floorHigh the crater WOULD force = 5.9104 QUOTE/TKN   (what a live denominator would have produced)
+  attacker TKN delivered  = 50 TKN
+  fair value @ snapshot floor = 2.995 QUOTE
+  reserve before attack   = 299.0  QUOTE
+  top-up (bounded, fair)  = ~2.5   QUOTE           (seller receives 2.49 QUOTE — the fair floor value)
+  reserve NET drained     = 0.82   QUOTE           (0.27% — vs 294.3 / ~98% before)
+  reserve after attack    = 298.18 QUOTE
+```
+
+The over-extraction is **closed**: the attacker who once turned 50 TKN (worth 2.99 QUOTE) into 294.3 QUOTE
+now receives only **2.49 QUOTE** — the honest fair value of the TKN they delivered — and the shared reserve
+is essentially untouched (299.0 → 298.18). All the prior bounds still hold:
+* the top-up never exceeds `floorHigh · executedTkn / 1e18` (the cd2109a fix bound);
 * the payout is capped by `reserveQuote` → the hook stays **solvent** (`balance == reserve + owed`);
-* `programmableFeeOwed` (the owner's 10bps) is **untouched and still fully claimable** after the drain.
+* `programmableFeeOwed` (the owner's 10bps) is **untouched and still fully claimable**.
 
-### Why the IN-MODEL versions are safe (why 1.3 is not a bug)
+The out-of-model FoT / reentrant-quote assumptions below still stand; this fix specifically neutralizes the
+`totalSupply`-manipulation vector on the floor path (it also makes a reverting/reentrant `totalSupply()`
+irrelevant to swaps, since the floor no longer calls it — see finding 4.5).
 
-Let reserve `R`, supply `S`, attacker holds `h`, burns `b` of their OWN tokens, sells `h−b`:
+### Why every supply-manipulation is now safe (post-hardening)
+
+With the floor denominator FROZEN at the bind-time snapshot `S₀`, no post-init supply change touches the
+floor. For reserve `R`, attacker holding `h`, any burn `b` (own OR anyone else's) and sell `h−b`:
 
 ```
-floorHigh  → R·1e18/(S−b)
-extraction ≤ floorHigh·(h−b)/1e18 = R·(h−b)/(S−b)
-d/db [ (h−b)/(S−b) ] = (h−S)/(S−b)² < 0   (since h < S)
+floorHigh  → R·1e18/S₀            (S₀ constant — the crater's `S−b` is gone)
+extraction ≤ floorHigh·(h−b)/1e18 = R·(h−b)/S₀   ≤ R·h/S₀   (maximized at b = 0)
 ```
 
-So extraction is **maximized at `b = 0`** (no burn) at `R·h/S` = the honest floor-value of your holding.
-Burning your own tokens is strictly *worse*. Negative rebase scales `h` down with `S`, leaving `h/S`
-unchanged — also no gain. Only cutting **someone else's** supply (`burn-anyone`) increases `R·h/(S−b)`,
-and that is the out-of-model primitive. `test_burnOwnSupply_topUpBoundedByExecutedFairValue` confirms the
-bound empirically.
+Cutting **someone else's** supply (`burn-anyone`) no longer increases the denominator, so the ~99× spike is
+impossible; extraction is bounded by `R·h/S₀` = the honest floor-value of the holding (finding 1.2 fixed).
+Burning **your own** tokens is still no better (fewer tokens to redeem, floor unchanged); negative rebase is
+inert on the floor. `test_adminBurnAnyone_mitigatedByImmutableSnapshot_noOverExtraction`,
+`test_burnOwnSupply_topUpBoundedByExecutedFairValue` and `test_floorImmuneToPostInitSupply_mintAndBurn`
+confirm the bound empirically.
 
 ---
 
 ## Token assumptions / out-of-model
 
 The hook is **solvent against any ERC-20** (every top-up is capped by `reserveQuote ≤ its ERC-6909 claim
-balance`; the fee is minted as claims and the split is exact). What a *non-standard* TKN can break is the
-**floor VALUE guarantee**, never solvency and never the platform liability.
+balance`; the fee is minted as claims and the split is exact). Since the finding-1.2 hardening the floor
+denominator is an **immutable bind-time snapshot**, so a *non-standard* TKN can no longer break the **floor
+VALUE guarantee** by moving supply post-init either. `totalSupply()` is now read only ONCE, at bind time.
 
-| TKN behavior | In model? | Effect | Bound |
-|--------------|-----------|--------|-------|
-| Fixed-supply ERC-20 (the intended model) | ✅ yes | Floor value is meaningful and honest | — |
-| ERC20Burnable (burn-your-own) | ✅ effectively | Cannot over-extract (algebra above) | Solvent; not profitable |
-| Mintable / inflationary supply | ⚠️ tolerated | Lowers the *candidate* floor; `floorHigh` holds (monotonic) | No drain (finding 1.4) |
-| **`burn-anyone` / admin burn / negative rebase** | ❌ **out-of-model** | Spikes `floorHigh`; a fractional holder can over-extract the reserve | **Reserve only**; solvency + 10bps liability intact (finding 1.2) |
-| Fee-on-transfer / deflationary-on-transfer TKN | ❌ out-of-model | Accelerates reserve payout as supply drifts down; TKN-side FoT changes executed `tknDelta` only | Solvency unaffected (quote-side accounting) |
-| `totalSupply()` reverts / unbounded gas | ❌ out-of-model | Bricks swaps on its own pool (DoS) | No state corruption (finding 4.5) |
-| Reentrant `totalSupply()` / `transfer` | ❌ out-of-model | Attempts blocked by STATICCALL + `AlreadyUnlocked` + `onlyPoolManager` | No drain/double-spend (3.3, 3.4) |
+| TKN behavior | Effect on floor (post-snapshot) | Bound |
+|--------------|-----------|-------|
+| Fixed-supply ERC-20 (the intended model) | snapshot == live → floor value meaningful and honest (unchanged) | — |
+| ERC20Burnable (burn-your-own) after init | none — floor reads the frozen snapshot | Solvent; not profitable |
+| Mintable / inflationary supply after init | none — snapshot understates supply → floor slightly higher, reserve-capped | No drain (finding 1.4) |
+| **`burn-anyone` / admin burn / negative rebase after init** | **none — floor immune (FIXED)**; the crater cannot spike `floorHigh` | Bounded to fair value; solvency + 10bps intact (finding 1.2) |
+| Fee-on-transfer / deflationary-on-transfer TKN | out-of-model; TKN-side FoT changes executed `tknDelta` only, floor denominator is frozen | Solvency unaffected (quote-side accounting) |
+| `totalSupply()` reverts / unbounded gas at bind | reverts `_afterInitialize` → pool never binds (fail-safe); post-init reverts are irrelevant (not read) | No state corruption; swaps no longer brickable (finding 4.5) |
+| Reentrant `totalSupply()` after init | never invoked on the swap path → reentry cannot fire (plus STATICCALL/`AlreadyUnlocked`/`onlyPoolManager`) | No drain/double-spend (3.3, 3.4) |
 
 **Quote-side assumptions:** the quote currency is assumed a standard, non-reentrant, non-fee-on-transfer
 ERC-20 (fee/reserve are held as exact ERC-6909 claims; payout uses `take`, so a FoT quote would short the
@@ -115,14 +145,15 @@ re-mineable, so a grief costs the deployer only a redeploy.
 
 ---
 
-## New tests added (`test/audit/`, 14 total)
+## New tests added (`test/audit/`, 15 total)
 
 | File | Tests | Covers |
 |------|-------|--------|
-| `TokenModel.t.sol` | 4 | supply-crash floor spike (out-of-model drain, bounded), burn-own bound, inflation no-drain, reverting `totalSupply` DoS |
+| `TokenModel.t.sol` | 5 | finding-1.2 fix (admin-burn cannot spike floor / no over-extraction), burn-own bounded to snapshot floor, inflation no-drain, reverting `totalSupply` no longer bricks swaps, floor immune to post-init mint+burn |
 | `BindingFrontrun.t.sol` | 3 | binding front-run griefing, re-bind forbidden, non-quote pool rejected |
-| `ReentrancyDeeper.t.sol` | 2 | `totalSupply()` reentry (STATICCALL guard), claim payout CEI |
+| `ReentrancyDeeper.t.sol` | 2 | `totalSupply()` reentry (never invoked on swap path post-snapshot), claim payout CEI |
 | `OwnerReserveIsolation.t.sol` | 3 | owner can’t reduce reserve, drain-to-zero leaves liability payable, no external reserve mutator |
 | `FeeBypassAndAccounting.t.sol` | 2 | fee fragmentation never under-charges, ERC-6909 donation inert/unstealable |
 
-Line references (`src L…`) are into `src/AntifragileFloorHook.sol` at the audited commit.
+Line references (`src L…`) are into `src/AntifragileFloorHook.sol` at the audited commit; the finding-1.2
+hardening (immutable `backedSupplySnapshot`) postdates that commit.

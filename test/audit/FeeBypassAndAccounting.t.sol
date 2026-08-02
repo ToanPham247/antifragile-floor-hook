@@ -143,9 +143,10 @@ contract FeeBypassAndAccounting is AuditBase {
         assertGe(_quoteBal(h), h.reserveQuote() + h.programmableFeeOwed(id, quote), "still fully backed");
     }
 
-    /// @dev floorHigh candidate implied by the CURRENT accounted reserve (reserveQuote * 1e18 / supply).
+    /// @dev floorHigh candidate implied by the CURRENT accounted reserve. The denominator is the hook's
+    ///      IMMUTABLE bind-time snapshot (never a live totalSupply()), matching the hardened floor path.
     function _floorFromReserve(AntifragileFloorHook h) internal view returns (uint256) {
-        uint256 supply = MockERC20(Currency.unwrap(tkn)).totalSupply();
+        uint256 supply = h.backedSupplySnapshot();
         return supply == 0 ? 0 : (h.reserveQuote() * WAD) / supply;
     }
 }

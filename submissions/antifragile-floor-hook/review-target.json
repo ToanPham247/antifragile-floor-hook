@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "standardVersion": "1.3.0",
-  "submissionHash": "sha256:dc928f5d5e60cb37f2522107cf9bae16ff5fd485d576f3d0ebb147eb27574079",
+  "submissionHash": "sha256:b34e30b6979fdcedc41ac15408c125ed886fe7c080f322645dace30c83e69194",
   "closureMethod": "declared-bytes-and-resolved-solidity-and-javascript-imports-v10",
   "closure": {
     "status": "complete",
@@ -15,46 +15,10 @@
       "sha256": "06ba3416e19f32109a6c26c4015ce3031a8cb24a17888e8a5c1965710e1ed89b"
     },
     {
-      "path": "EVIDENCE.md",
-      "kind": "package:EVIDENCE.md",
-      "bytes": 10864,
-      "sha256": "bef6093d2f3271761a76d30d53f845f46eb06a05baa7197fe0f8e3de164de149"
-    },
-    {
-      "path": "PROPOSAL.md",
-      "kind": "package:PROPOSAL.md",
-      "bytes": 13502,
-      "sha256": "dd4d430fdee540c810c769918cabff8163e28a19c6217cd97ceded94d4a5ff6e"
-    },
-    {
-      "path": "TEST_PLAN.md",
-      "kind": "package:TEST_PLAN.md",
-      "bytes": 9797,
-      "sha256": "e6aaeca1e11ec79aed21b630a5dbe2e633eac88d4186859cc005c124b5701a06"
-    },
-    {
-      "path": "THREAT_MODEL.md",
-      "kind": "package:THREAT_MODEL.md",
-      "bytes": 14285,
-      "sha256": "5059c3426a0961bf7b7aeacf067a2a841f75b5e2588d0186ccd6dc1a6f5478d3"
-    },
-    {
-      "path": "compatibility-report.json",
-      "kind": "package:compatibility-report.json",
-      "bytes": 14354,
-      "sha256": "03b4553a4702719be98d2e4e1e5dfcaf4b9a1344ef2a9705b366e982bbfb88ab"
-    },
-    {
       "path": "compatibility.lock.json",
       "kind": "project-surface-evidence:antifragile-floor-hook",
       "bytes": 5714,
       "sha256": "1148c58d664f6c54bce2145871421b1ca9033feec6336e793c7e985c685753e5"
-    },
-    {
-      "path": "deployment-evidence.json",
-      "kind": "deployment-evidence:Uniswap v4 PoolManager",
-      "bytes": 3561,
-      "sha256": "a2d92bb6884b91707619d5ac7039152a76735430ff3f9dcdabdd280271af9275"
     },
     {
       "path": "docs/AUDIT.md",
@@ -1761,10 +1725,46 @@
       "sha256": "b755594cd357cdcded49e4c199c8a85f479f9c91030c464ca7ce50c9e1af84cd"
     },
     {
-      "path": "submission.json",
+      "path": "submissions/antifragile-floor-hook/EVIDENCE.md",
+      "kind": "package:EVIDENCE.md",
+      "bytes": 10864,
+      "sha256": "bef6093d2f3271761a76d30d53f845f46eb06a05baa7197fe0f8e3de164de149"
+    },
+    {
+      "path": "submissions/antifragile-floor-hook/PROPOSAL.md",
+      "kind": "package:PROPOSAL.md",
+      "bytes": 13502,
+      "sha256": "dd4d430fdee540c810c769918cabff8163e28a19c6217cd97ceded94d4a5ff6e"
+    },
+    {
+      "path": "submissions/antifragile-floor-hook/TEST_PLAN.md",
+      "kind": "package:TEST_PLAN.md",
+      "bytes": 9797,
+      "sha256": "e6aaeca1e11ec79aed21b630a5dbe2e633eac88d4186859cc005c124b5701a06"
+    },
+    {
+      "path": "submissions/antifragile-floor-hook/THREAT_MODEL.md",
+      "kind": "package:THREAT_MODEL.md",
+      "bytes": 14285,
+      "sha256": "5059c3426a0961bf7b7aeacf067a2a841f75b5e2588d0186ccd6dc1a6f5478d3"
+    },
+    {
+      "path": "submissions/antifragile-floor-hook/compatibility-report.json",
+      "kind": "package:compatibility-report.json",
+      "bytes": 14354,
+      "sha256": "79c27885620b9ec7c5bd297994cb0f738d29cddefabfb73ac06d309d0b7431d3"
+    },
+    {
+      "path": "submissions/antifragile-floor-hook/deployment-evidence.json",
+      "kind": "deployment-evidence:Uniswap v4 PoolManager",
+      "bytes": 3561,
+      "sha256": "a2d92bb6884b91707619d5ac7039152a76735430ff3f9dcdabdd280271af9275"
+    },
+    {
+      "path": "submissions/antifragile-floor-hook/submission.json",
       "kind": "package:submission.json",
-      "bytes": 90533,
-      "sha256": "2e9dd3cc52dfb4d15b77371acca1944a3b5e31615e6a3164e1504df8897102a8"
+      "bytes": 90638,
+      "sha256": "41a9ec1e0a8d1df39f1c6f7105ae3e7d1a86215d669bf44fb274da2bfc677a98"
     },
     {
       "path": "test/AntifragileFloorHook.t.sol",
@@ -6218,5 +6218,5 @@
     }
   ],
   "javascriptImportResolutions": [],
-  "reviewTargetHash": "sha256:2ce809a0c8ac2f28b6e0bcd97bc48d33ae510883de93bef3e2158597a988447e"
+  "reviewTargetHash": "sha256:99b25700678f44226f466580bee0360d79bcef1b7d9266a58a1c540b2932451f"
 }

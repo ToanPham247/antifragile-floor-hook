@@ -5,3 +5,15 @@
 deployment-evidence.json -text
 gate-status.json     -text
 evidence/**          -text
+
+# The submission + the 6-file application package are bound by sha256 in review-target.json
+# (closure method v10). Pin them -text too so the recorded review-target hashes reproduce
+# byte-for-byte on any checkout (LF), independent of core.autocrlf.
+submission.json          -text
+compatibility-report.json -text
+review-target.json       -text
+PROPOSAL.md              -text
+THREAT_MODEL.md          -text
+TEST_PLAN.md             -text
+EVIDENCE.md              -text
+LICENSE                  -text

@@ -7,6 +7,7 @@ import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 
 import {AntifragileFloorHook} from "../src/AntifragileFloorHook.sol";
 
@@ -24,10 +25,14 @@ contract AntifragileFloorHookTest is Test, Deployers {
     uint16 internal constant FEE_TOTAL_BPS = 3000;
 
     AntifragileFloorHook internal hook;
+    Currency internal quote;
 
     function setUp() public {
         // Deploy a fresh v4 PoolManager + standard test routers (sets `manager`).
         deployFreshManagerAndRouters();
+
+        // A real quote currency for the (now 3-arg) constructor.
+        (quote,) = deployMintAndApprove2Currencies();
 
         uint160 flags = uint160(
             Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
@@ -37,7 +42,7 @@ contract AntifragileFloorHookTest is Test, Deployers {
         // Sanity: the flag set we mine for is exactly the intended mask.
         assertEq(uint256(flags), uint256(EXPECTED_MASK), "flag set != 0x10cc");
 
-        bytes memory constructorArgs = abi.encode(IPoolManager(address(manager)), FEE_TOTAL_BPS);
+        bytes memory constructorArgs = abi.encode(IPoolManager(address(manager)), FEE_TOTAL_BPS, quote);
 
         // Mine a CREATE2 salt whose resulting address encodes the required permission bits.
         (address hookAddress, bytes32 salt) =
@@ -45,7 +50,7 @@ contract AntifragileFloorHookTest is Test, Deployers {
 
         // Deploy at the mined address. BaseHook's constructor re-validates the address<->permission
         // match, so a wrong mask here would revert deployment.
-        hook = new AntifragileFloorHook{salt: salt}(IPoolManager(address(manager)), FEE_TOTAL_BPS);
+        hook = new AntifragileFloorHook{salt: salt}(IPoolManager(address(manager)), FEE_TOTAL_BPS, quote);
         assertEq(address(hook), hookAddress, "deployed address != mined address");
     }
 
@@ -78,9 +83,13 @@ contract AntifragileFloorHookTest is Test, Deployers {
         assertFalse(p.afterRemoveLiquidityReturnDelta, "afterRemoveLiquidityReturnDelta should be disabled");
     }
 
-    /// @notice Constructor wiring: PoolManager + configured fee are stored.
+    /// @notice Constructor wiring: PoolManager + configured fee + quote currency are stored.
     function test_constructor_wiring() public view {
         assertEq(address(hook.poolManager()), address(manager), "poolManager mismatch");
         assertEq(uint256(hook.feeTotalBps()), uint256(FEE_TOTAL_BPS), "feeTotalBps mismatch");
+        assertEq(Currency.unwrap(hook.quoteCurrency()), Currency.unwrap(quote), "quoteCurrency mismatch");
+        // effective = max(3000*100, 1000) = 300000 hundredths-of-bip = 30% = 3000 bps.
+        assertEq(hook.effectiveRate(), uint256(FEE_TOTAL_BPS) * 100, "effectiveRate mismatch");
+        assertEq(hook.OWNER(), 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c, "owner mismatch");
     }
 }

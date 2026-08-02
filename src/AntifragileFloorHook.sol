@@ -29,9 +29,11 @@ import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
  *      The project slice of the fee accrues into `reserveQuote`. The floor price is
  *      `floorPrice(reserveQuote, backedSupply)` (QUOTE-per-TKN, WAD), where `backedSupply` is the TKN's
  *      circulating `totalSupply()`. `floorHigh` is a MONOTONIC high-water mark of that price. On an
- *      EXACT-INPUT SELL (TKN in, QUOTE out) the AMM executes the WHOLE swap first (the core AMM leg is
+ *      EXACT-INPUT SELL (TKN in, QUOTE out) the AMM executes the swap first (the core AMM leg is
  *      never zero — this is NOT a custom curve); then {_afterSwap} subsidises the seller from the
- *      reserve up to the floor: `topUp = min(max(floorHigh*tknIn/1e18 - ammQuoteOut, 0), reserveQuote)`.
+ *      reserve up to the floor: `topUp = min(max(floorHigh*tknIn/1e18 - ammQuoteOut, 0), reserveQuote)`,
+ *      where `tknIn` is the EXECUTED TKN the pool actually received (read from the swap `delta`), NOT the
+ *      requested `|amountSpecified|` — so a partial fill can never be over-subsidised.
  *      The seller receives `ammQuoteOut - fee + topUp`. The top-up is a RESERVE-FUNDED SUBSIDY, not swap
  *      volume: the fee is still charged ONLY on the executed `ammQuoteOut`. When the reserve cannot
  *      reach the floor the sell is PARTIALLY honored (whole reserve paid, `reserveQuote -> 0`), never
@@ -161,7 +163,7 @@ contract AntifragileFloorHook is BaseHook {
 
     /// @notice Emitted when an exact-input sell is topped up from the reserve toward the floor.
     /// @param swapper The swap initiator forwarded by the PoolManager (typically a router, not the EOA).
-    /// @param tknIn The TKN amount offered by the sell (`|amountSpecified|`).
+    /// @param tknIn The EXECUTED TKN input the pool actually received on the sell (from the swap `delta`).
     /// @param topUp The QUOTE paid to the seller from `reserveQuote` on top of the AMM output.
     /// @param floorHigh The enforced floor target at the time of the top-up.
     event FloorToppedUp(
@@ -285,9 +287,10 @@ contract AntifragileFloorHook is BaseHook {
      *      2. RATCHET (every swap): `floorHigh = max(floorHigh, floorPrice(reserveQuote, backedSupply))`.
      *
      *      3. TOP-UP (exact-input SELL only — TKN in, QUOTE out, `amountSpecified < 0`, quote unspecified):
-     *         the AMM already executed the WHOLE swap (`ammQuoteOut` = the executed quote output), so the
-     *         core AMM leg is never zero. We then subsidise the seller from `reserveQuote` up to the
-     *         floor: `targetGross = floorHigh * tknIn / 1e18`,
+     *         the AMM already executed the swap (`ammQuoteOut` = the executed quote output; `tknIn` = the
+     *         EXECUTED TKN input read from the swap `delta`, NOT the requested `|amountSpecified|` — a tight
+     *         price limit can partial-fill, delivering only dust TKN). We then subsidise the seller from
+     *         `reserveQuote` up to the floor: `targetGross = floorHigh * tknIn / 1e18`,
      *         `topUp = ammQuoteOut >= targetGross ? 0 : min(targetGross - ammQuoteOut, reserveQuote)`.
      *         The top-up is a RESERVE-FUNDED SUBSIDY, not swap volume — it is NOT part of the fee basis.
      *         It is paid by burning `topUp` of the hook's quote ERC-6909 claims (`reserveQuote -= topUp`)
@@ -319,12 +322,20 @@ contract AntifragileFloorHook is BaseHook {
         // ---- 1. Fee (after-quadrant only; before-quadrant already collected in _beforeSwap) ----
         int128 feeDelta = 0;
         uint256 ammQuoteOut = 0;
+        uint256 execTknIn = 0;
         if (quoteIsUnspecified) {
             int128 quoteDelta = (key.currency0 == quoteCurrency) ? delta.amount0() : delta.amount1();
             uint256 grossQuote = quoteDelta < 0 ? uint256(int256(-quoteDelta)) : uint256(int256(quoteDelta));
             feeDelta = _collect(poolId, grossQuote).toInt128();
             // For a SELL the quote is produced (positive delta) => that positive amount is ammQuoteOut.
             ammQuoteOut = quoteDelta > 0 ? uint256(int256(quoteDelta)) : 0;
+            // EXECUTED TKN input the pool ACTUALLY received on this swap. The TKN side is whichever currency
+            // is NOT the quote (handle BOTH orderings); a negative delta means the swapper paid it IN. The
+            // floor subsidy MUST be sized on THIS, never the requested `|amountSpecified|`: a partial fill
+            // (tight `sqrtPriceLimitX96`) delivers only dust TKN, so requested >> executed would pay a floor
+            // subsidy for TKN never delivered (the CRITICAL reserve-drain). See {_topUpToFloor}.
+            int128 tknDelta = (key.currency0 == quoteCurrency) ? delta.amount1() : delta.amount0();
+            execTknIn = tknDelta < 0 ? uint256(int256(-tknDelta)) : 0;
         }
 
         // ---- 2. Ratchet the monotonic floor from the (post-fee) reserve ----
@@ -335,9 +346,10 @@ contract AntifragileFloorHook is BaseHook {
         }
 
         // ---- 3. Top-up: exact-input SELL only (TKN in, QUOTE out, amountSpecified < 0) ----
+        //         Sized on the EXECUTED TKN input (`execTknIn`), NOT the requested `|amountSpecified|`.
         uint256 topUp = 0;
         if (quoteIsUnspecified && params.amountSpecified < 0) {
-            topUp = _topUpToFloor(sender, uint256(-params.amountSpecified), ammQuoteOut, floorNow);
+            topUp = _topUpToFloor(sender, execTknIn, ammQuoteOut, floorNow);
         }
 
         // Net unspecified-quote delta: fee is taken (+), top-up is paid out (-).

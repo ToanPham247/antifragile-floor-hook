@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "attestation": "builder-declared-untrusted",
+  "standardVersion": "1.3.0",
+  "_binding": "Every gate result and evidence content-hash below is REAL and reproducible now (commit cd2109aeb0f7bc3c99b32225c171c1e5fd868330). The seven identity digests marked 'sha256:pending-preflight-binding' (submissionHash, validatorSha256, schemaSha256, deploymentSnapshotSha256, officialDeploymentReferenceSha256, policyBundleSha256, reviewTargetHash) are computed by the validator PREFLIGHT when this file is bound into submission.json (implementation.gateStatusPath). They are placeholders on purpose and are NOT a claim that any check produced them.",
+  "submissionHash": "sha256:pending-preflight-binding",
+  "validatorSha256": "sha256:pending-preflight-binding",
+  "schemaSha256": "sha256:pending-preflight-binding",
+  "deploymentSnapshotSha256": "sha256:pending-preflight-binding",
+  "officialDeploymentReferenceSha256": "sha256:pending-preflight-binding",
+  "policyBundleSha256": "sha256:pending-preflight-binding",
+  "reviewTargetHash": "sha256:pending-preflight-binding",
+  "gates": [
+    {
+      "id": "format-build-size-warnings",
+      "status": "completed",
+      "note": "forge build succeeds under the pinned solc 0.8.26 / cancun / optimizer runs=200 profile. The only build warning is a forge-lint unsafe-typecast note in test/ProgrammableFee.t.sol (an int256 cast in a test helper, not the review-target contract); no warnings originate from src/. The committed .gas-snapshot records gas/size for the local suite (its per-run fuzz means vary by seed; medians are stable).",
+      "evidence": [
+        {
+          "gateId": "format-build-size-warnings",
+          "result": "passed",
+          "scope": "forge build of the whole project (src + tests) under the pinned solc 0.8.26/cancun/optimizer-200 profile; compiler run successful with only a test-file lint warning.",
+          "path": "evidence/forge-build.txt",
+          "sha256": "sha256:fd4d1d03928eedc278c6a4c72abec50981e108fd8a040d3253193e211d4e37b9",
+          "command": "forge build --force",
+          "toolVersion": "forge 1.7.1 (4072e48705 2026-05-08)",
+          "commit": "cd2109aeb0f7bc3c99b32225c171c1e5fd868330",
+          "reviewTargetHash": "sha256:pending-preflight-binding"
+        },
+        {
+          "gateId": "format-build-size-warnings",
+          "result": "passed",
+          "scope": "committed gas snapshot for the local test suite (per-test gas; fuzz means seed-dependent, medians stable).",
+          "path": ".gas-snapshot",
+          "sha256": "sha256:8cee44a1a675e9b6730582a929501e912c74fbe750cff65d82630624d73ff340",
+          "command": "forge snapshot --no-match-path 'test/fork/*'",
+          "toolVersion": "forge 1.7.1 (4072e48705 2026-05-08)",
+          "commit": "cd2109aeb0f7bc3c99b32225c171c1e5fd868330",
+          "reviewTargetHash": "sha256:pending-preflight-binding"
+        }
+      ]
+    },
+    {
+      "id": "unit-integration-fuzz-invariant-tests",
+      "status": "completed",
+      "note": "70 tests pass, 0 failed: unit + fuzz + 3 invariant suites (AntifragileDrainInvariant, AntifragileInvariants, AntifragileTwoPoolInvariant). Covers the programmable fee (quadrants, non-additive split, owner-only claim), the reserve-funded floor top-up (both token orderings, partial honor, monotonic ratchet), the reserve-drain regression, and the hard solvency invariant balance == reserveQuote + Σ programmableFeeOwed.",
+      "evidence": [
+        {
+          "gateId": "unit-integration-fuzz-invariant-tests",
+          "result": "passed",
+          "scope": "forge test of the local suite (fork tests excluded): 70 passed / 0 failed / 0 skipped across 10 suites, including fuzz (runs=256) and invariant (runs=256, depth=30) suites.",
+          "path": "evidence/forge-test-local.txt",
+          "sha256": "sha256:963eba7567e7a28fee88240b3ebfb93785c03fd9fa145b1440d34ce10bedf394",
+          "command": "forge test --no-match-path 'test/fork/*'",
+          "toolVersion": "forge 1.7.1 (4072e48705 2026-05-08)",
+          "commit": "cd2109aeb0f7bc3c99b32225c171c1e5fd868330",
+          "reviewTargetHash": "sha256:pending-preflight-binding"
+        }
+      ]
+    },
+    {
+      "id": "callback-authentication-and-permission-mask",
+      "status": "completed",
+      "note": "The mined CREATE2 hook address encodes exactly the permission mask 0x10cc (afterInitialize|beforeSwap|afterSwap|beforeSwapReturnDelta|afterSwapReturnDelta), getHookPermissions() returns exactly those five flags, and every hook entrypoint (beforeSwap/afterSwap/unlockCallback) is onlyPoolManager (reverts BaseHook.NotPoolManager for non-manager callers). Proven by test_hookAddress_encodesMask0x10cc, test_getHookPermissions_exactlyFiveFlags, test_06_hookEntrypointsAreOnlyPoolManager and test_09_entrypointsAreOnlyPoolManager in the local suite.",
+      "evidence": [
+        {
+          "gateId": "callback-authentication-and-permission-mask",
+          "result": "passed",
+          "scope": "local suite run containing the permission-mask (0x10cc) and onlyPoolManager authentication tests, all passing.",
+          "path": "evidence/forge-test-local.txt",
+          "sha256": "sha256:963eba7567e7a28fee88240b3ebfb93785c03fd9fa145b1440d34ce10bedf394",
+          "command": "forge test --no-match-path 'test/fork/*'",
+          "toolVersion": "forge 1.7.1 (4072e48705 2026-05-08)",
+          "commit": "cd2109aeb0f7bc3c99b32225c171c1e5fd868330",
+          "reviewTargetHash": "sha256:pending-preflight-binding"
+        }
+      ]
+    },
+    {
+      "id": "static-analysis",
+      "status": "completed",
+      "note": "Slither 0.11.6 (crytic-compile via forge). 1253 total detector results across 120 compiled contracts; 12 reference the review-target src/ and are individually triaged. NO true-positive bug in the hook: all 12 are false-positive or informational with documented rationale (the single Medium touching src/, unused-return on poolManager.unlock, is safe because unlockCallback returns empty bytes by design). Of 158 High/Medium results across all contracts, only that one touches src/; the rest are in node_modules dependencies and test scaffolding.",
+      "evidence": [
+        {
+          "gateId": "static-analysis",
+          "result": "passed",
+          "scope": "Slither triage of every finding that references the hook source (12/12 dispositioned; no true-positive bug).",
+          "path": "evidence/slither-hook-triage.md",
+          "sha256": "sha256:e6c4d44d77a14e283ce20c14d51738f18b802c6daa6462fdaba26043e7419b98",
+          "command": "slither . --foundry-compile-all --json <report>",
+          "toolVersion": "slither 0.11.6",
+          "commit": "cd2109aeb0f7bc3c99b32225c171c1e5fd868330",
+          "reviewTargetHash": "sha256:pending-preflight-binding"
+        },
+        {
+          "gateId": "static-analysis",
+          "result": "passed",
+          "scope": "machine-readable extraction of the 12 src/ findings plus the global severity histogram and scope breakdown.",
+          "path": "evidence/slither-hook-findings.json",
+          "sha256": "sha256:3ce638de0b2598bfabcef53d6f90c7aeb447fab3a2ab45d1465686043e57c820",
+          "command": "node -e '<extract src findings from slither JSON>'",
+          "toolVersion": "slither 0.11.6",
+          "commit": "cd2109aeb0f7bc3c99b32225c171c1e5fd868330",
+          "reviewTargetHash": "sha256:pending-preflight-binding"
+        }
+      ]
+    },
+    {
+      "id": "mainnet-fork-pinned-and-head-smoke",
+      "status": "completed",
+      "note": "Contributor-local fork evidence. This id is intentionally NOT the maintainer-owned candidate gate 'pinned-fork-and-current-head-smoke' nor the release gate 'runtime-source-config-verification' — those remain maintainer-owned and are deliberately left uncompleted here. The hook mines+deploys, initializes a canonical pool, adds liquidity and runs buy/sell/top-up against the REAL Ethereum-mainnet PoolManager 0x000000000004444c5dc75cB358380D2e3dE08A90 at pinned block 25666892 (observed runtime codehash 0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293) and a current-head smoke swap. 3/3 fork tests pass; no incompatibility with the real runtime surfaced.",
+      "evidence": [
+        {
+          "gateId": "mainnet-fork-pinned-and-head-smoke",
+          "result": "passed",
+          "scope": "forge test of test/fork/* against the real mainnet PoolManager: pinned-block (25666892) buy+sell+top-up+solvency and current-head smoke; 3 passed / 0 failed.",
+          "path": "evidence/forge-test-fork.txt",
+          "sha256": "sha256:61f5e52391262b6adfeaad81f7b85d57a8cc1117e2f5a27f859b245b40d0c11d",
+          "command": "MAINNET_RPC_URL=https://ethereum-rpc.publicnode.com forge test --match-path 'test/fork/*' -vv",
+          "toolVersion": "forge 1.7.1 (4072e48705 2026-05-08)",
+          "commit": "cd2109aeb0f7bc3c99b32225c171c1e5fd868330",
+          "reviewTargetHash": "sha256:pending-preflight-binding"
+        },
+        {
+          "gateId": "mainnet-fork-pinned-and-head-smoke",
+          "result": "passed",
+          "scope": "deployment-evidence for the PoolManager: observed runtime codehash + Sourcify runtime/creation source match, binding the pinned deployment record v4-poolmanager-ethereum.",
+          "path": "deployment-evidence.json",
+          "sha256": "sha256:a2d92bb6884b91707619d5ac7039152a76735430ff3f9dcdabdd280271af9275",
+          "command": "cast codehash 0x000000000004444c5dc75cB358380D2e3dE08A90 --rpc-url https://ethereum-rpc.publicnode.com --block 25666892 ; resolve-deployment.mjs --id v4-poolmanager-ethereum ; Sourcify v2 lookup",
+          "toolVersion": "cast 1.7.1 (4072e48705 2026-05-08) + node resolve-deployment.mjs",
+          "commit": "cd2109aeb0f7bc3c99b32225c171c1e5fd868330",
+          "reviewTargetHash": "sha256:pending-preflight-binding"
+        }
+      ]
+    }
+  ]
+}

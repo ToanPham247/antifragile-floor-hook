@@ -1,0 +1,7 @@
+# Evidence artifacts are content-addressed by sha256 in gate-status.json. Pin them as binary
+# (no EOL conversion) so their recorded hashes stay valid on every platform, regardless of the
+# consumer's core.autocrlf setting. Stored and checked out byte-for-byte.
+.gas-snapshot        -text
+deployment-evidence.json -text
+gate-status.json     -text
+evidence/**          -text

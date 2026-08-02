@@ -1,0 +1,16 @@
+# forge test --match-path 'test/fork/*' — REAL mainnet PoolManager 0x0000...8A90
+# pinned fork block 25666892 (codehash 0x785f...1293) + current-head smoke
+# forge Version: 1.7.1
+
+No files changed, compilation skipped
+
+Ran 2 tests for test/fork/AntifragileFork.t.sol:AntifragileForkPinnedTest
+[PASS] test_fork_buy_sell_topUp_againstRealPoolManager() (gas: 145646514)
+[PASS] test_fork_realPoolManager_identity() (gas: 8861)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 1.75s (1.47s CPU time)
+
+Ran 1 test for test/fork/AntifragileFork.t.sol:AntifragileForkHeadSmokeTest
+[PASS] test_fork_head_initAndOneSwap_smoke() (gas: 145213264)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 4.55s (3.62s CPU time)
+
+Ran 2 test suites in 4.55s (6.30s CPU time): 3 tests passed, 0 failed, 0 skipped (3 total tests)

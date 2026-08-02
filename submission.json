@@ -1,0 +1,1305 @@
+{
+  "$schema": "urn:programmable:v4-hook-submission:1.3.0",
+  "schemaVersion": 1,
+  "standardVersion": "1.3.0",
+  "stage": "prototype",
+  "model": {
+    "id": "antifragile-floor",
+    "name": "Antifragile Floor",
+    "summary": "A single custom v4 hook where every swap skims a project charge (20 bps) into a quote-asset (WETH) reserve that funds a monotonic, ratchet-only price floor; on exact-input sells the hook tops the seller up from the reserve toward the floor AFTER the AMM executes the full swap (the core AMM leg is always the full swap; the hook adds no pricing math of its own), and the mandatory 10 bps Programmable volume fee accrues as an owner-only claimable liability.",
+    "userOutcome": "A creator launches a WETH-paired token whose exact-input sellers are subsidised toward a transparent, on-chain price floor that only ratchets up, funded by the pool's own trading volume, with no admin, oracle, keeper or upgrade.",
+    "category": "market-structure",
+    "whyV4": "Only a v4 hook can (a) collect the mandatory volume fee non-bypassably through quadrant-dependent beforeSwap/afterSwap return deltas on the quote side of every canonical-pool swap, and (b) read the executed swap BalanceDelta in afterSwap and pay a reserve-funded top-up toward the monotonic floor as an afterSwapReturnDelta, atomically, from aggregate pool state without any per-user identity."
+  },
+  "builder": {
+    "github": "ToanPham247",
+    "contact": "https://github.com/ToanPham247",
+    "beneficiary": null,
+    "licenseDeclaration": "MIT (SPDX-License-Identifier: MIT on all first-party src/ and test/ files); pinned dependencies retain their own licenses per compatibility.lock.json."
+  },
+  "publicMetadata": {
+    "project": {
+      "name": "Antifragile Floor",
+      "description": "An AMM hook that enforces a self-funded, ratchet-only price floor: every trade funds a WETH reserve, and sellers can always redeem against that reserve at the floor price.",
+      "projectUri": null,
+      "logoUri": null,
+      "logoContentHash": null,
+      "metadataMutable": false,
+      "metadataOwner": null
+    },
+    "token": {
+      "name": "Antifragile Floor Token",
+      "symbol": "FLOOR",
+      "metadataUri": null,
+      "metadataContentHash": null,
+      "logoUri": null,
+      "logoContentHash": null,
+      "metadataMutable": false,
+      "metadataOwner": null
+    },
+    "claimedAffiliations": [
+      { "organization": "Uniswap v4", "relationship": "technology-use", "evidenceUri": null },
+      { "organization": "OpenZeppelin Uniswap Hooks", "relationship": "technology-use", "evidenceUri": null }
+    ],
+    "providerPresentations": []
+  },
+  "target": {
+    "chainId": 1,
+    "network": "ethereum",
+    "solidityVersion": "0.8.26",
+    "evmVersion": "cancun",
+    "dependencyBaseline": "programmable-tested",
+    "officialLaunchProfileId": null
+  },
+  "assets": [
+    {
+      "id": "weth",
+      "role": "quote",
+      "origin": "existing-erc20",
+      "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "decimals": 18,
+      "decimalsSource": "token-contract-observation",
+      "supplyPolicy": "externally-managed",
+      "initialSupply": null,
+      "behaviors": ["standard"],
+      "controls": []
+    },
+    {
+      "id": "floor-token",
+      "role": "launched",
+      "origin": "new-fixed-supply",
+      "address": null,
+      "decimals": 18,
+      "decimalsSource": "implementation-constant",
+      "supplyPolicy": "fixed-at-creation",
+      "initialSupply": "1000000000000000000000000000",
+      "behaviors": ["standard"],
+      "controls": []
+    }
+  ],
+  "launchLifecycle": {
+    "tokenCreation": {
+      "applicable": true,
+      "actor": "The official token factory mints the full fixed supply to the launcher at creation; no mint, freeze, blacklist or confiscation authority remains.",
+      "valueFlow": "Fixed supply of the launched token is created once and delivered to the liquidity launcher.",
+      "custody": "The launcher holds the initial supply until liquidity formation; the hook never mints or holds initial supply.",
+      "failure": "Creation reverts atomically if the factory parameters are invalid; no partial supply is created.",
+      "event": "Standard token creation and factory events identify the exact token address.",
+      "notApplicableReason": null
+    },
+    "poolInitialization": {
+      "applicable": true,
+      "actor": "The launcher initializes exactly one canonical PoolKey containing the immutable quote currency (WETH); _afterInitialize records tknCurrency (the non-quote side) and binds the single PoolId.",
+      "valueFlow": "No value moves at initialization; the hook records the canonical PoolId and tknCurrency. reserveQuote and floorHigh start at zero (default).",
+      "custody": "No custody at initialization.",
+      "failure": "_afterInitialize reverts NotQuotePool if the pool does not contain the immutable quote currency, and PoolAlreadyBound on any second initialization, so exactly one canonical pool binds this hook.",
+      "event": "No event is emitted in _afterInitialize; the bound canonical PoolId and tknCurrency are readable via the poolId() and tknCurrency() getters.",
+      "notApplicableReason": null
+    },
+    "liquidityFormation": {
+      "applicable": true,
+      "actor": "The launcher adds initial concentrated liquidity through the standard position manager; the hook has no add/remove-liquidity callbacks enabled.",
+      "valueFlow": "WETH and the launched token form the initial concentrated-liquidity position owned by the launcher or its LPs.",
+      "custody": "Liquidity is owned by standard v4 LP positions, never by the hook; pool liquidity is excluded from hook reserves.",
+      "failure": "A failed add reverts without affecting the hook's reserve or floor state.",
+      "event": "Standard PoolManager ModifyLiquidity events.",
+      "notApplicableReason": null
+    },
+    "initialTransaction": {
+      "applicable": true,
+      "actor": "The first swap runs the hook's beforeSwap and afterSwap paths; floorHigh is zero until the reserve accrues, so no top-up occurs on the first trades.",
+      "valueFlow": "The volume charge begins accruing to the platform liability and reserve reserveQuote from the first executed swap.",
+      "custody": "reserveQuote begins accumulating as hook-held ERC-6909 quote (WETH) claims.",
+      "failure": "Any accrual arithmetic or settlement failure reverts the first swap atomically.",
+      "event": "ProgrammableFeeCollected and (once the reserve and floor price are nonzero) FloorRatcheted.",
+      "notApplicableReason": null
+    },
+    "trading": {
+      "applicable": true,
+      "actor": "Traders swap in both directions through standard v4 routers; the AMM executes the full swap and the hook accrues the volume charge every swap and, on exact-input sells, tops the seller up toward the floor from the reserve.",
+      "valueFlow": "Buys and sells pay the 30 bps hook volume charge (10 bps platform + 20 bps reserve); on an exact-input sell the hook additionally pays the seller a reserve-funded top-up toward the monotonic floor, sized on the EXECUTED tkn input, as a negative afterSwap delta netted against the fee.",
+      "custody": "reserveQuote (WETH) is a hook-held ERC-6909 quote claim; the top-up is backed 1:1 by reserveQuote and never exceeds it. No token-side custody: the seller's whole token amount goes to the core AMM (there is no sink).",
+      "failure": "A reserve too small to reach the floor is honored partially (the whole reserve is paid, reserveQuote -> 0), never reverted; any fee take/settle, cap or checked-conversion failure reverts the swap atomically.",
+      "event": "ProgrammableFeeCollected, FloorToppedUp, FloorRatcheted.",
+      "notApplicableReason": null
+    },
+    "feesAndClaims": {
+      "applicable": true,
+      "actor": "The authenticated PoolManager callback accrues both the platform liability (programmableFeeOwed) and the reserve (reserveQuote); only the immutable Programmable owner can claim the platform liability via claimProgrammableFee.",
+      "valueFlow": "10 bps of executed gross quote-side volume accrues as an owner-only claimable liability; 20 bps funds reserveQuote; the reserve is never claimable by anyone and only pays sellers a top-up toward the floor.",
+      "custody": "The hook holds the platform liability and the reserve as ERC-6909 quote (WETH) claims; the liability is keyed by (poolId,currency), the reserve is a single pool-scoped balance.",
+      "failure": "A claim by a non-owner (NotOwner) or to the zero address (InvalidDestination) reverts; a zero owed amount is a no-op emit; a claim never touches the reserve.",
+      "event": "ProgrammableFeeClaimed for owner claims; ProgrammableFeeCollected for accrual.",
+      "notApplicableReason": null
+    },
+    "dependencyFailure": {
+      "applicable": true,
+      "actor": "The only onchain dependency is the immutable v4 PoolManager, the standard WETH contract (owner claim payout) and the tkn's totalSupply() read; there is no oracle, keeper, bridge or upgrade dependency.",
+      "valueFlow": "If PoolManager reverts, the whole swap reverts atomically and no reserve or liability changes.",
+      "custody": "Reserve and liabilities remain exactly as last settled; nothing is stranded.",
+      "failure": "The hook fails closed: any dependency failure reverts the action rather than continuing in a degraded state.",
+      "event": "No new event on a reverted action.",
+      "notApplicableReason": null
+    },
+    "retirement": {
+      "applicable": true,
+      "actor": "There is no admin retirement; the hook, floor mechanics and parameters are immutable, and any new behavior would ship as a new model version with a new pool.",
+      "valueFlow": "Sellers continue to receive reserve-funded top-ups toward the ratcheted floor for the life of the pool; the platform owner can claim its liability at any time.",
+      "custody": "reserveQuote stays with the hook backing the floor until spent by seller top-ups.",
+      "failure": "No migration path can lower the floor or withdraw the reserve to a third party.",
+      "event": "No retirement event; the pool remains live and immutable.",
+      "notApplicableReason": null
+    }
+  },
+  "pool": {
+    "currency0": "weth",
+    "currency1": "floor-token",
+    "orderingRule": "Mine the launched-token CREATE2 salt until its predicted address sorts after the fixed mainnet WETH address, so WETH is currency0 and the launched token is currency1; the hook address is mined so its permission bits match the enabled callbacks.",
+    "tickSpacing": 60,
+    "lpFee": {
+      "classification": "lp-fee",
+      "mode": "static",
+      "hundredthsOfBip": 3000,
+      "initialHundredthsOfBip": null,
+      "initializationPath": null,
+      "applicationMode": null,
+      "overrideFlagPolicy": null,
+      "persistentUpdateActor": null,
+      "persistentUpdateCallSites": [],
+      "rateLimit": null,
+      "updatePath": null,
+      "minimum": null,
+      "maximum": null,
+      "inputMetric": null,
+      "referenceAsset": null,
+      "measurementUnit": null,
+      "observationMode": null,
+      "observationWindow": null,
+      "curve": null,
+      "updateCadence": null,
+      "liquidityDecreaseBehavior": null,
+      "manipulationResistance": null,
+      "failureRule": null,
+      "recipient": "pool-liquidity-providers"
+    },
+    "canonical": true,
+    "alternativePools": "Alternative pools may exist but do not inherit the floor, reserve or fee behavior. Only the canonical launcher-emitted WETH/FLOOR PoolKey bound at afterInitialize is the Antifragile Floor pool."
+  },
+  "programmableFee": {
+    "policyId": "programmable-volume-fee-v1",
+    "policyVersion": "1.0.0",
+    "poolScope": "canonical-launch-pool-key",
+    "rates": {
+      "unit": "hundredths-of-bip",
+      "selectedHundredthsOfBip": 3000,
+      "minimumEffectiveHundredthsOfBip": 1000,
+      "effectiveHundredthsOfBip": 3000,
+      "platformHundredthsOfBip": 1000,
+      "projectHundredthsOfBip": 2000,
+      "formula": "effective=max(selected,1000);platform=1000;project=effective-1000",
+      "lpFeeExcluded": true
+    },
+    "basis": {
+      "volume": "gross-quote-side-swap-volume",
+      "quoteAsset": "canonical-pool-quote-asset"
+    },
+    "ownership": {
+      "owner": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      "immutable": true,
+      "claimAuthority": "owner-only",
+      "claimAvailability": "anytime",
+      "claimDestinationPolicy": "owner-or-owner-selected-per-claim",
+      "storedMutableRecipient": false,
+      "builderCanMutate": false,
+      "projectCanMutate": false,
+      "administratorCanMutate": false
+    },
+    "collection": {
+      "status": "implemented",
+      "integration": "canonical-pool-hook",
+      "enforcement": "non-bypassable",
+      "hookFeeMechanismBinding": "hook.feeMechanism",
+      "supportedSwapModes": ["zeroForOne-exactInput", "zeroForOne-exactOutput", "oneForZero-exactInput", "oneForZero-exactOutput"],
+      "swapModePaths": {
+        "zeroForOneExactInput": "before-swap-return-delta",
+        "zeroForOneExactOutput": "after-swap-return-delta",
+        "oneForZeroExactInput": "after-swap-return-delta",
+        "oneForZeroExactOutput": "before-swap-return-delta"
+      },
+      "selfCallPolicy": "same-pool-swap-forbidden"
+    },
+    "accounting": {
+      "accrualMode": "claimable-liability",
+      "liabilityKeyDimensions": ["poolId", "currency", "owner"],
+      "crossPoolNetting": false,
+      "valueFlowId": "swap-volume-charge",
+      "collectionEvent": "ProgrammableFeeCollected(PoolId indexed poolId,Currency indexed currency,uint256 platformAmount,uint256 projectAmount)",
+      "claimEvent": "ProgrammableFeeClaimed(PoolId indexed poolId,Currency indexed currency,address indexed destination,uint256 amount)"
+    },
+    "evidence": {
+      "sourcePaths": ["src/AntifragileFloorHook.sol", "src/lib/FloorMath.sol"],
+      "testPaths": ["test/ProgrammableFee.t.sol", "test/FloorHonor.t.sol", "test/AntifragileFloorHook.t.sol"]
+    }
+  },
+  "hook": {
+    "used": true,
+    "base": "openzeppelin-uniswap-hooks BaseHook (pinned), project-specific fee + floor accounting",
+    "upgradeable": false,
+    "sharedAcrossPools": false,
+    "poolNamespace": "One hook instance backs exactly one canonical launch PoolKey; all reserve, floor and liability state is keyed by that single PoolId.",
+    "poolAdmission": {
+      "enforcement": "_afterInitialize binds the FIRST initialized PoolKey that contains the immutable quoteCurrency (recording tknCurrency and poolId) and reverts every later initialization with PoolAlreadyBound; a pool without the quote currency reverts NotQuotePool.",
+      "factoryOrRegistry": "The launcher initializes exactly one canonical WETH-paired PoolKey whose hooks field is this mined hook address; the hook self-binds the first such PoolId at _afterInitialize (no separate factory registry or provenance hash is used).",
+      "alternativePoolBehavior": "Once bound, any second pool referencing this hook address reverts PoolAlreadyBound at initialization; pools without this hook are unaffected and never inherit floor or fee behavior.",
+      "rejectionRule": "Revert NotQuotePool for a PoolKey lacking the quote currency, and PoolAlreadyBound for any initialization after the first."
+    },
+    "permissions": {
+      "beforeInitialize": false,
+      "afterInitialize": true,
+      "beforeAddLiquidity": false,
+      "afterAddLiquidity": false,
+      "beforeRemoveLiquidity": false,
+      "afterRemoveLiquidity": false,
+      "beforeSwap": true,
+      "afterSwap": true,
+      "beforeDonate": false,
+      "afterDonate": false,
+      "beforeSwapReturnDelta": true,
+      "afterSwapReturnDelta": true,
+      "afterAddLiquidityReturnDelta": false,
+      "afterRemoveLiquidityReturnDelta": false
+    },
+    "callbackPolicies": [
+      {
+        "callback": "afterInitialize",
+        "necessity": "Binds the single canonical PoolId and records tknCurrency (the non-quote side) on the first pool containing the quote currency; reserveQuote and floorHigh start at their zero defaults.",
+        "allowedReverts": "NotQuotePool if the pool lacks the quote currency, or PoolAlreadyBound on a second initialization; the first valid quote-pool initialization never reverts.",
+        "userExitImpact": "Initialization does not affect any user exit; liquidity removal and swaps remain available afterward.",
+        "noSelfCallImpact": "afterInitialize performs no swap, liquidity action or nested PoolManager call that re-enters this hook."
+      },
+      {
+        "callback": "beforeSwap",
+        "necessity": "For before-quadrants (the quote is the swap's specified currency) it mints the total fee as quote ERC-6909 claims and returns it as a positive beforeSwapReturnDelta on the specified currency, so v4 carves the fee out of the swap. For after-quadrants it returns a zero delta (the fee is collected in afterSwap). It performs no floor logic.",
+        "allowedReverts": "Only a checked uint256->int128 conversion or a fee take failure may revert the complete swap.",
+        "userExitImpact": "The callback only carves the small fee and never blocks a buy, a sell, or liquidity removal.",
+        "noSelfCallImpact": "The fee take mints the hook's own quote claims and never initiates a same-pool swap, so v4 skips no required callback."
+      },
+      {
+        "callback": "afterSwap",
+        "necessity": "Reads the executed swap BalanceDelta; for after-quadrants it accrues the 30 bps volume charge (10 bps platform liability + 20 bps reserve) from the executed gross quote-side amount; it ratchets floorHigh upward only; and on an exact-input sell it pays the seller a reserve-funded top-up toward the floor (sized on the executed tkn input), netted with the fee as the returned int128.",
+        "allowedReverts": "Only accrual arithmetic, a checked uint256->int128 conversion, a fee take or a top-up settle failure may revert the complete swap; a reserve too small for the floor is honored partially, not reverted.",
+        "userExitImpact": "The fee affects swaps only; the top-up improves an exact-input seller's outcome; standard liquidity removal is never blocked.",
+        "noSelfCallImpact": "afterSwap only mints/burns its own quote claims via take/settle and does not initiate another swap or liquidity action on this pool."
+      }
+    ],
+    "hookData": {
+      "used": false,
+      "schema": null,
+      "identitySource": null,
+      "trustedRouterDeploymentRecordId": null,
+      "callbackSenderRule": null,
+      "validation": null
+    },
+    "feeMechanism": {
+      "used": true,
+      "classification": "hook-owned-fee",
+      "chargedCurrency": "WETH (currency0, the immutable quote asset) charged on the executed gross quote-side amount of every swap. The predicate is: collect BEFORE iff the quote is the swap's specified currency, else AFTER.",
+      "swapQuadrants": {
+        "zeroForOneExactInput": {
+          "currency": "currency0",
+          "basis": "gross-input",
+          "formula": "BUY exact-in: quote (currency0/WETH) is the specified input. total = ceil(|amountSpecified| * effectiveRate / 1e6); platform = ceil(|amountSpecified| * 1000 / 1e6); project = total - platform. Minted as quote ERC-6909 claims and returned as a positive beforeSwapReturnDelta on the specified currency0, so v4 carves `total` out of the swapped input.",
+          "rounding": "up",
+          "maximumHundredthsOfBip": 3000
+        },
+        "zeroForOneExactOutput": {
+          "currency": "currency0",
+          "basis": "gross-input",
+          "formula": "BUY exact-out: quote (currency0/WETH) is the unspecified input, known only post-swap. total = ceil(executedWethIn * effectiveRate / 1e6) where executedWethIn is read from the swap BalanceDelta; taken after the core swap as a positive afterSwap return delta on the unspecified currency0.",
+          "rounding": "up",
+          "maximumHundredthsOfBip": 3000
+        },
+        "oneForZeroExactInput": {
+          "currency": "currency0",
+          "basis": "gross-output",
+          "formula": "SELL exact-in: quote (currency0/WETH) is the unspecified output. total = ceil(ammQuoteOut * effectiveRate / 1e6) where ammQuoteOut is the executed WETH output read from the swap BalanceDelta; taken after the core swap. This quadrant ALSO carries the reserve-funded floor top-up (a negative afterSwap delta) netted with the fee: net = feeDelta - topUp.",
+          "rounding": "up",
+          "maximumHundredthsOfBip": 3000
+        },
+        "oneForZeroExactOutput": {
+          "currency": "currency0",
+          "basis": "gross-output",
+          "formula": "SELL exact-out: quote (currency0/WETH) is the specified output. total = ceil(|amountSpecified| * effectiveRate / 1e6); returned as a positive beforeSwapReturnDelta on the specified currency0 so v4 produces `total` extra output for the hook. No top-up in this quadrant (v1 tops up exact-input sells only).",
+          "rounding": "up",
+          "maximumHundredthsOfBip": 3000
+        }
+      },
+      "maximumHundredthsOfBip": 3000,
+      "collectionPath": "quadrant-dependent-swap-return-delta",
+      "collectionValueFlowId": "swap-volume-charge",
+      "liabilityKeyDimensions": ["poolId", "currency", "beneficiary"],
+      "collectionEvent": "ProgrammableFeeCollected(PoolId indexed poolId,Currency indexed currency,uint256 platformAmount,uint256 projectAmount)",
+      "recipients": [
+        {
+          "role": "programmable-platform",
+          "sharePpm": 333333,
+          "addressSource": "fixed-address",
+          "address": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+          "binding": "exact-address",
+          "derivationRule": null,
+          "mutable": false,
+          "mutationController": "none",
+          "newAddressValidation": "none",
+          "mutationEvent": null
+        },
+        {
+          "role": "Floor reserve (hook custody, 20 bps project portion)",
+          "sharePpm": 666667,
+          "addressSource": "derived-contract",
+          "address": null,
+          "binding": "immutable-derived-contract",
+          "derivationRule": "The 20 bps project portion (total - platform) is credited to reserveQuote held by the hook as ERC-6909 quote (WETH) claims in PoolManager. It is never withdrawable by any admin, builder or project role and only leaves by paying a seller a reserve-funded top-up toward the current floor.",
+          "mutable": false,
+          "mutationController": "none",
+          "newAddressValidation": "none",
+          "mutationEvent": null
+        }
+      ],
+      "ownership": "The 10 bps platform portion is an immutable claimable liability (programmableFeeOwed) owned solely by 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c. The 20 bps project portion is locked in the hook's floor reserve (reserveQuote). No admin, builder or project role can withdraw, mutate or redirect either portion.",
+      "claimPolicy": "Only the immutable Programmable owner may claim the platform liability via claimProgrammableFee, to itself or an owner-selected destination per claim. The reserve is not claimable by anyone; it is spent only through reserve-funded floor top-ups to sellers."
+    },
+    "customAccounting": {
+      "used": true,
+      "backingSource": "The floor reserve reserveQuote holds real quote (WETH) accrued from the 20 bps project slice of the fee, custodied as the hook's ERC-6909 quote claims in PoolManager. Every top-up is funded by burning at most reserveQuote of those claims; the hook can pay a top-up of at most reserveQuote and never returns an unbacked or no-op delta.",
+      "conservationEquation": "hook ERC-6909 quote-claim balance == reserveQuote + programmableFeeOwed[poolId][quote] exactly after every swap and every owner claim (>= as the safety bound); reserveQuote >= 0. floorPrice = reserveQuote * 1e18 / backedSupply, backedSupply = IERC20(tknCurrency).totalSupply(). floorHigh = max(floorHigh, floorPrice) is monotonic: a top-up decrements only reserveQuote and never floorHigh, and floorHigh can legitimately sit above the live floorPrice after a drain (the payout is then additionally capped by the live reserve = partial honor).",
+      "settlement": "Within one PoolManager unlock: beforeSwap collects the fee for before-quadrants (quote specified); afterSwap reads the executed swap BalanceDelta, collects the fee for after-quadrants (quote unspecified), ratchets floorHigh, and on an exact-input sell pays a reserve-funded top-up. Fee and top-up net into one unspecified-currency int128 (net = feeDelta - topUp). All hook transient deltas net to zero before the unlock ends.",
+      "partialFillBehavior": "The top-up is sized on the EXECUTED tkn the pool received (execTknIn, from the swap delta), never the requested |amountSpecified| — a price-limited partial fill cannot be over-subsidised (closes the reserve-drain fixed at cd2109a). If reserveQuote cannot reach the floor, the whole reserve is paid (reserveQuote -> 0), a partial honor, never reverted. The fee accrues only on the executed ammQuoteOut, never the subsidy (fairness invariant).",
+      "liabilityNamespace": "programmableFeeOwed is a mapping(PoolId => mapping(Currency => uint256)); reserveQuote and floorHigh are single pool-scoped scalars. The platform liability and the floor reserve are the only two quote-denominated ledgers; there is no token-side ledger (no sink).",
+      "liabilityKeyDimensions": ["poolId", "currency", "beneficiary"],
+      "crossPoolNetting": false,
+      "duplicateCurrencyPolicy": "Only one canonical pool binds per hook instance, so there is no shared-currency cross-pool aggregation. Quote held for the platform liability (programmableFeeOwed) is accounted separately from quote held as the reserve (reserveQuote).",
+      "failureIsolation": "Any failed take/settle, checked uint256->int128 conversion or arithmetic reverts the entire swap atomically; no partial or unfunded liability is ever recorded. A reserve too small for the floor is honored partially, not reverted.",
+      "withdrawalOrdering": "claimProgrammableFee checks msg.sender == OWNER and a nonzero destination, zeroes programmableFeeOwed[poolId][currency], then (if nonzero) opens a PoolManager unlock to burn the hook's quote claims and take the underlying to the destination; the reserve is never touched by a claim and has no withdrawal path other than seller top-ups."
+    },
+    "returnDeltaAccounting": {
+      "used": true,
+      "quadrants": {
+        "zeroForOneExactInput": {
+          "supported": true,
+          "specifiedCurrency": "currency0",
+          "unspecifiedCurrency": "currency1",
+          "amountSign": "negative-exact-input",
+          "specifiedComponent": {
+            "mode": "positive-only",
+            "formula": "BUY exact-in: total = ceil(|amountSpecified| * effectiveRate / 1e6) returned as a positive specified (currency0/WETH) delta so only (|amountSpecified| - total) enters the core swap; no floor top-up on buys.",
+            "minimum": "zero base units of currency0 when the executed input is zero, producing no fee",
+            "maximum": "ceil(|amountSpecified| * effectiveRate / 1e6) which for effectiveRate <= 3000 is a small fraction of the input, so the fee never consumes the entire input",
+            "minimumSign": "zero",
+            "maximumSign": "positive",
+            "positiveSettlementActions": [
+              {
+                "order": 1,
+                "actor": "hook",
+                "operation": "take",
+                "currency": "specified",
+                "assetKind": "erc20",
+                "deltaOwner": "hook",
+                "deltaEffect": "negative",
+                "counterparty": "hook",
+                "authorizationRule": "onlyPoolManager callback",
+                "msgValueRule": null,
+                "amountRule": "quoteCurrency.take(poolManager, hook, total, true): mint `total` of the specified currency0 as ERC-6909 claims to the hook.",
+                "completionDeadline": "before-hook-return"
+              },
+              {
+                "order": 2,
+                "actor": "hook",
+                "operation": "internal-ledger-update",
+                "currency": "specified",
+                "assetKind": "erc20",
+                "deltaOwner": "hook",
+                "deltaEffect": "none",
+                "counterparty": "not-applicable",
+                "authorizationRule": null,
+                "msgValueRule": null,
+                "amountRule": "Credit platform = ceil(|amountSpecified|*1000/1e6) to programmableFeeOwed and project = total - platform to reserveQuote.",
+                "completionDeadline": "before-hook-return"
+              }
+            ],
+            "negativeSettlementActions": []
+          },
+          "unspecifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "residualAmmEquation": "amountSpecified-plus-specifiedDelta",
+          "finalCallerDeltaEquation": "pool-manager-swap-delta-minus-hook-delta",
+          "specifiedDeltaCanConsumeEntireAmount": false,
+          "rounding": "The fee ceils on the specified side (protocol favor); the platform 10 bps ceils and project = total - platform, so platform + project == total exactly.",
+          "zeroAmmLeg": "forbidden",
+          "partialFillRule": "The fee is taken only from the executed specified amount; an unfilled amount is not charged.",
+          "slippageInvariant": "The router enforces the trader's minimum token output against the final caller delta after the fee.",
+          "failureRule": "Zero input returns zero fee; any checked-conversion or take failure reverts the whole swap."
+        },
+        "zeroForOneExactOutput": {
+          "supported": true,
+          "specifiedCurrency": "currency1",
+          "unspecifiedCurrency": "currency0",
+          "amountSign": "positive-exact-output",
+          "specifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "unspecifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "residualAmmEquation": "amountSpecified-plus-specifiedDelta",
+          "finalCallerDeltaEquation": "pool-manager-swap-delta-minus-hook-delta",
+          "specifiedDeltaCanConsumeEntireAmount": false,
+          "rounding": "No beforeSwap delta in this quadrant; the fee is charged after the swap on the unspecified currency0 and rounds up.",
+          "zeroAmmLeg": "forbidden",
+          "partialFillRule": "The fee is computed after the swap from the executed currency0 input only.",
+          "slippageInvariant": "The router enforces the trader's maximum input against the final caller delta after the after-swap fee.",
+          "failureRule": "Any cap breach, take, split or claim failure reverts the whole swap."
+        },
+        "oneForZeroExactInput": {
+          "supported": true,
+          "specifiedCurrency": "currency1",
+          "unspecifiedCurrency": "currency0",
+          "amountSign": "negative-exact-input",
+          "specifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "unspecifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "residualAmmEquation": "amountSpecified-plus-specifiedDelta",
+          "finalCallerDeltaEquation": "pool-manager-swap-delta-minus-hook-delta",
+          "specifiedDeltaCanConsumeEntireAmount": false,
+          "rounding": "beforeSwap returns no delta in this quadrant; the whole sell reaches the core AMM (full AMM leg). The fee AND the reserve-funded floor top-up are handled in afterSwap on the unspecified currency0 (see postReturnDeltaAccounting.afterSwap) with ceil fee rounding and floor-rounded top-up.",
+          "zeroAmmLeg": "forbidden",
+          "partialFillRule": "No beforeSwap carve-out here, so the AMM always executes the full requested sell (subject to liquidity/price limit); the top-up in afterSwap is sized on the executed tkn input.",
+          "slippageInvariant": "The router enforces the seller's minimum output against the final caller delta after the afterSwap fee-minus-top-up net.",
+          "failureRule": "No beforeSwap failure path in this quadrant; the afterSwap fee/top-up failure rules apply."
+        },
+        "oneForZeroExactOutput": {
+          "supported": true,
+          "specifiedCurrency": "currency0",
+          "unspecifiedCurrency": "currency1",
+          "amountSign": "positive-exact-output",
+          "specifiedComponent": {
+            "mode": "positive-only",
+            "formula": "SELL exact-out: total = ceil(|amountSpecified| * effectiveRate / 1e6) on the specified currency0 (WETH) output, returned as a positive beforeSwapReturnDelta so v4 produces `total` extra WETH output for the hook; the seller receives the requested exact output and the fee is carved from the pool. No floor top-up on exact-output sells.",
+            "minimum": "zero base units of currency0 when the executed output is zero, producing no fee",
+            "maximum": "ceil(|amountSpecified| * effectiveRate / 1e6), a small fraction of the requested output for effectiveRate <= 3000",
+            "minimumSign": "zero",
+            "maximumSign": "positive",
+            "positiveSettlementActions": [
+              {
+                "order": 1,
+                "actor": "hook",
+                "operation": "take",
+                "currency": "specified",
+                "assetKind": "erc20",
+                "deltaOwner": "hook",
+                "deltaEffect": "negative",
+                "counterparty": "hook",
+                "authorizationRule": "onlyPoolManager callback",
+                "msgValueRule": null,
+                "amountRule": "quoteCurrency.take(poolManager, hook, total, true): mint `total` of the specified currency0 as ERC-6909 claims to the hook.",
+                "completionDeadline": "before-hook-return"
+              },
+              {
+                "order": 2,
+                "actor": "hook",
+                "operation": "internal-ledger-update",
+                "currency": "specified",
+                "assetKind": "erc20",
+                "deltaOwner": "hook",
+                "deltaEffect": "none",
+                "counterparty": "not-applicable",
+                "authorizationRule": null,
+                "msgValueRule": null,
+                "amountRule": "Credit platform = ceil(|amountSpecified|*1000/1e6) to programmableFeeOwed and project = total - platform to reserveQuote.",
+                "completionDeadline": "before-hook-return"
+              }
+            ],
+            "negativeSettlementActions": []
+          },
+          "unspecifiedComponent": {
+            "mode": "zero-only",
+            "formula": null,
+            "minimum": "0",
+            "maximum": "0",
+            "minimumSign": "zero",
+            "maximumSign": "zero",
+            "positiveSettlementActions": [],
+            "negativeSettlementActions": []
+          },
+          "residualAmmEquation": "amountSpecified-plus-specifiedDelta",
+          "finalCallerDeltaEquation": "pool-manager-swap-delta-minus-hook-delta",
+          "specifiedDeltaCanConsumeEntireAmount": false,
+          "rounding": "The fee ceils on the specified currency0 output (protocol favor); v1 does not top up exact-output sells, so the unspecified token side carries no hook delta.",
+          "zeroAmmLeg": "forbidden",
+          "partialFillRule": "The fee is computed from the requested exact currency0 output; exact-output either fills the exact output or reverts.",
+          "slippageInvariant": "The router enforces the seller's maximum token input against the final caller delta after the fee.",
+          "failureRule": "Any checked-conversion or take failure reverts the whole swap."
+        }
+      },
+      "executionEvent": "ProgrammableFeeCollected(PoolId indexed poolId,Currency indexed currency,uint256 platformAmount,uint256 projectAmount)"
+    },
+    "postReturnDeltaAccounting": {
+      "afterSwap": {
+        "used": true,
+        "returnedDeltaShape": "unspecified-currency-int128",
+        "positiveMeaning": "hook-credit-caller-debit",
+        "negativeMeaning": "hook-debt-caller-credit",
+        "backingSource": "The afterSwap net delta on the unspecified (quote) currency is net = feeDelta - topUp. The positive part (feeDelta) is the fee taken from the executed unspecified quote and split into programmableFeeOwed and reserveQuote. The negative part (topUp) is a reserve-funded subsidy paid by burning the hook's OWN quote ERC-6909 reserve claims, capped at reserveQuote, so it creates no unbacked credit.",
+        "callerDeltaEquation": "protocol-delta-minus-hook-delta",
+        "componentPolicies": {
+          "unspecified": {
+            "mode": "signed-bounded",
+            "formula": "net = feeDelta - topUp on the unspecified (quote) currency. feeDelta = ceil(executedGrossQuote * effectiveRate / 1e6) >= 0 (after-quadrants: exact-output buy and exact-input sell). topUp = (exact-input sell only) min(max(floorHigh*execTknIn/1e18 - ammQuoteOut, 0), reserveQuote), else 0. execTknIn is the EXECUTED tkn read from the swap delta.",
+            "minimum": "negative up to the live reserveQuote, when a fully-subsidised below-floor exact-input sell has topUp > feeDelta (the hook pays out net)",
+            "maximum": "positive up to ceil(effectiveRate/1e6 * executed gross quote) = at most 30 bps of the executed gross quote-side amount, when no top-up applies (buys / above-floor sells)",
+            "minimumSign": "negative",
+            "maximumSign": "positive",
+            "positiveSettlementActions": [
+              {
+                "order": 1,
+                "actor": "hook",
+                "operation": "take",
+                "currency": "unspecified",
+                "assetKind": "erc20",
+                "deltaOwner": "hook",
+                "deltaEffect": "negative",
+                "counterparty": "hook",
+                "authorizationRule": "onlyPoolManager callback",
+                "msgValueRule": null,
+                "amountRule": "quoteCurrency.take(poolManager, hook, total, true): mint total = ceil(executedGrossQuote*effectiveRate/1e6) of the unspecified currency0 as ERC-6909 claims to the hook.",
+                "completionDeadline": "before-hook-return"
+              },
+              {
+                "order": 2,
+                "actor": "hook",
+                "operation": "internal-ledger-update",
+                "currency": "unspecified",
+                "assetKind": "erc20",
+                "deltaOwner": "hook",
+                "deltaEffect": "none",
+                "counterparty": "not-applicable",
+                "authorizationRule": null,
+                "msgValueRule": null,
+                "amountRule": "Credit platform = ceil(executedGrossQuote*1000/1e6) to programmableFeeOwed and project = total - platform to reserveQuote.",
+                "completionDeadline": "before-hook-return"
+              }
+            ],
+            "negativeSettlementActions": [
+              {
+                "order": 1,
+                "actor": "hook",
+                "operation": "burn-claim",
+                "currency": "unspecified",
+                "assetKind": "erc20",
+                "deltaOwner": "hook",
+                "deltaEffect": "positive",
+                "counterparty": "PoolManager",
+                "authorizationRule": "The hook burns its OWN quote ERC-6909 reserve claims (claim owner == hook) inside the onlyPoolManager afterSwap callback; no external operator is set.",
+                "msgValueRule": null,
+                "amountRule": "quoteCurrency.settle(poolManager, hook, topUp, true): burn topUp = min(max(floorHigh*execTknIn/1e18 - ammQuoteOut, 0), reserveQuote) of the hook's quote claims to fund the seller top-up.",
+                "completionDeadline": "before-hook-return"
+              },
+              {
+                "order": 2,
+                "actor": "hook",
+                "operation": "internal-ledger-update",
+                "currency": "unspecified",
+                "assetKind": "erc20",
+                "deltaOwner": "hook",
+                "deltaEffect": "none",
+                "counterparty": "not-applicable",
+                "authorizationRule": null,
+                "msgValueRule": null,
+                "amountRule": "Decrement reserveQuote by exactly topUp (reserveQuote -= topUp); reserveQuote can only reach zero, never go negative (partial honor).",
+                "completionDeadline": "before-hook-return"
+              }
+            ]
+          },
+          "currency0": null,
+          "currency1": null
+        },
+        "bounds": "The positive part never exceeds 30 bps of executed gross quote volume; the negative part (top-up) never exceeds the live reserveQuote, so hook ERC-6909 quote balance == reserveQuote + programmableFeeOwed remains exact (solvent by construction).",
+        "rounding": "Fee amounts ceil (protocol favor); the top-up floors its WAD division floorHigh*execTknIn/1e18 (never over-paying the reserve); uint256 -> int128 conversions are checked (SafeCast).",
+        "slippageOrMinimums": "The router applies the trader's minimum output or maximum input to the final caller delta after the fee-minus-top-up net, not to a pre-fee quote.",
+        "failureRule": "A zero executed amount yields zero fee; a reserve too small to reach the floor is honored partially (whole reserve paid, reserveQuote -> 0), never reverted; any checked-conversion, take or settle failure reverts the entire swap.",
+        "executionEvent": "ProgrammableFeeCollected(PoolId indexed poolId,Currency indexed currency,uint256 platformAmount,uint256 projectAmount) on accrual; FloorToppedUp(PoolId indexed poolId,address indexed swapper,uint256 tknIn,uint256 topUp,uint256 floorHigh) on each top-up; FloorRatcheted(PoolId indexed poolId,uint256 floorHigh) when the high-water mark increases."
+      },
+      "afterAddLiquidity": {
+        "used": false,
+        "returnedDeltaShape": null,
+        "positiveMeaning": null,
+        "negativeMeaning": null,
+        "backingSource": null,
+        "callerDeltaEquation": null,
+        "componentPolicies": { "unspecified": null, "currency0": null, "currency1": null },
+        "bounds": null,
+        "rounding": null,
+        "slippageOrMinimums": null,
+        "failureRule": null,
+        "executionEvent": null
+      },
+      "afterRemoveLiquidity": {
+        "used": false,
+        "returnedDeltaShape": null,
+        "positiveMeaning": null,
+        "negativeMeaning": null,
+        "backingSource": null,
+        "callerDeltaEquation": null,
+        "componentPolicies": { "unspecified": null, "currency0": null, "currency1": null },
+        "bounds": null,
+        "rounding": null,
+        "slippageOrMinimums": null,
+        "failureRule": null,
+        "executionEvent": null
+      }
+    },
+    "erc6909Claims": {
+      "used": true,
+      "currencyIdDerivation": "currency-address-uint160",
+      "claimBalanceScope": "claim-owner-and-currency",
+      "poolIdIncludedInClaimId": false,
+      "owner": "The hook contract owns all ERC-6909 quote (WETH) claims backing reserveQuote and the platform liability. No token-side claims are held (there is no sink).",
+      "operatorPolicy": "The hook sets no ERC-6909 operator; no external operator can move the hook's claims.",
+      "mintFlow": "The fee is taken with claims=true (CurrencySettler.take), minting quote ERC-6909 claims to the hook; the project slice increments reserveQuote and the platform slice increments programmableFeeOwed.",
+      "burnFlow": "A floor top-up settles with burn=true (CurrencySettler.settle), burning quote claims from reserveQuote to fund the seller subsidy; an owner claim settles/burns quote claims from programmableFeeOwed inside a PoolManager unlock, then takes the underlying to the destination.",
+      "takeSettleFlow": "take(claims=true) to mint and settle(burn=true) to burn within one unlock; the hook's transient deltas net to zero before unlock end. The owner-claim path opens its own PoolManager unlock (unlockCallback) to settle then take the underlying.",
+      "liabilityKeys": "programmableFeeOwed keyed by (poolId, currency); reserveQuote is a single pool-scoped scalar. beneficiary in {programmable-owner, floor-reserve} (no token-sink).",
+      "liabilityKeyDimensions": ["poolId", "currency", "beneficiary"],
+      "crossPoolNetting": false,
+      "transferPolicy": "The hook never transfers claims to third parties; claims leave only via an owner claim (platform liability) or a reserve-funded top-up settlement (reserve).",
+      "redemption": "Reserve claims are burned to pay sellers a top-up toward the floor; platform claims are burned to pay the owner-selected destination on claim.",
+      "roundingDust": "Fee amounts ceil, and project = total - platform, so platform + project == total exactly with no leftover dust; project == 0 exactly when effective == 1000.",
+      "aggregateSolvencyEquation": "For the quote currency: hook ERC-6909 quote balance in PoolManager == reserveQuote + programmableFeeOwed at every confirmed block (>= as the safety bound); reserveQuote >= 0; pool LP liquidity is excluded from hook reserves."
+    },
+    "nestedActions": {
+      "used": false,
+      "directPoolManagerCalls": false,
+      "routerCalls": false,
+      "allowedActions": [],
+      "samePoolPolicy": "The hook never calls swap, modify-liquidity or donate on its own pool (it contains no poolManager.swap). It only mints/burns its own quote claims (fee take with claims=true, top-up settle with burn=true) inside the swap callbacks; the owner-claim path opens its own PoolManager unlock (unlockCallback) to burn the platform claim and take the underlying to the destination.",
+      "crossPoolPolicy": "The hook touches no other pool and holds no cross-pool state.",
+      "callbackSuppression": "Take, settle and the claim unlock do not re-enter the hook's swap or liquidity callbacks; v4 additionally no-ops hook callbacks on self-calls.",
+      "directCallbackBehavior": "self-call-hook-callbacks-skipped",
+      "routerCallbackBehavior": null,
+      "maximumDepth": 1,
+      "stateCommitOrder": "afterSwap reads the executed swap BalanceDelta, collects the after-quadrant fee, ratchets floorHigh, then pays any top-up, all within the same unlock before the returned net delta is settled.",
+      "transientDeltaOwner": "The hook owns its transient deltas and settles them to zero before the unlock ends.",
+      "syncInterleaving": "CurrencySettler handles ERC-6909 mint (take, claims=true) and burn (settle, burn=true) directly; the owner-claim underlying payout uses settle(burn=true) then take(claims=false) inside its own unlock.",
+      "slippageAggregation": "The router aggregates the final caller delta after the fee and the reserve-funded top-up (net = fee - topUp).",
+      "failureAtomicity": "Any settlement failure reverts the entire swap; no partial settlement persists."
+    }
+  },
+  "noHookArchitecture": null,
+  "valueFlows": [
+    {
+      "id": "swap-volume-charge",
+      "action": "accrue the hook-owned volume charge",
+      "asset": "canonical quote (WETH, currency0)",
+      "from": "the executed gross quote-side amount",
+      "to": "10 bps platform liability plus 20 bps floor reserve (reserveQuote)",
+      "amountRule": "effective = max(selected 3000, 1000) = 3000 hundredths-of-bip on executed gross quote-side volume; total ceils; platform = ceil(gross*1000/1e6); project = total - platform; per-quadrant before/after return delta.",
+      "settlement": "Quadrant-dependent before/after swap return delta takes the quote with claims=true (mint ERC-6909) into the hook and splits it into programmableFeeOwed and reserveQuote.",
+      "failure": "Any checked-conversion or take failure reverts the whole swap."
+    },
+    {
+      "id": "programmable-fee-accrual",
+      "action": "accrue the 10 bps platform liability",
+      "asset": "WETH (currency0)",
+      "from": "the platform portion of swap-volume-charge",
+      "to": "the immutable owner claimable liability programmableFeeOwed keyed (poolId,currency)",
+      "amountRule": "platform = ceil(executedGrossQuote * 1000 / 1e6) hundredths-of-bip of the gross quote-side amount.",
+      "settlement": "Credited as a claimable-liability ERC-6909 quote (WETH) claim held by the hook for the immutable owner.",
+      "failure": "Any arithmetic or settlement failure reverts the swap."
+    },
+    {
+      "id": "reserve-skim",
+      "action": "fund the floor reserve",
+      "asset": "WETH (currency0)",
+      "from": "the project portion of swap-volume-charge",
+      "to": "floor reserve reserveQuote (hook ERC-6909 quote claims)",
+      "amountRule": "project = total - platform (~2000 hundredths-of-bip of the gross quote-side amount).",
+      "settlement": "Increment reserveQuote; the corresponding quote ERC-6909 claim is already minted to the hook by the fee take.",
+      "failure": "Any arithmetic or settlement failure reverts the swap."
+    },
+    {
+      "id": "floor-topup",
+      "action": "top up an exact-input seller toward the monotonic floor",
+      "asset": "WETH (currency0)",
+      "from": "floor reserve reserveQuote",
+      "to": "the selling trader",
+      "amountRule": "topUp = min(max(floorHigh*execTknIn/1e18 - ammQuoteOut, 0), reserveQuote); sized on the EXECUTED tkn input, capped by the live reserve (partial honor). It is a subsidy, not swap volume, and is never part of the fee basis.",
+      "settlement": "afterSwapReturnDelta pays the seller a negative net delta funded by settling (burning) topUp of the hook's quote ERC-6909 reserve claims and decrementing reserveQuote.",
+      "failure": "A reserve too small for the floor is honored partially (whole reserve paid, reserveQuote -> 0), never reverted."
+    },
+    {
+      "id": "programmable-fee-claim",
+      "action": "the immutable owner claims the platform liability",
+      "asset": "WETH (currency0)",
+      "from": "the hook platform liability",
+      "to": "the immutable owner 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c or an owner-selected destination",
+      "amountRule": "Exactly the accrued platform liability programmableFeeOwed[poolId][currency], zeroed on claim.",
+      "settlement": "claimProgrammableFee zeroes the liability then, if nonzero, opens a PoolManager unlock to burn the hook's quote claims and take the underlying to the owner-selected destination.",
+      "failure": "A non-owner caller reverts NotOwner; a zero-address destination reverts InvalidDestination; a zero owed amount is a no-op (emits amount 0) and never touches the reserve."
+    },
+    {
+      "id": "core-swap-settlement",
+      "action": "settle the core AMM swap",
+      "asset": "WETH and the launched token",
+      "from": "the trader and the pool",
+      "to": "the pool and the trader",
+      "amountRule": "Standard v4 concentrated-liquidity settlement of the FULL swap; the fee is carved via the hook's before/after return delta and the top-up is added as a negative afterSwap delta, so the core AMM leg is always the full swap (never zero).",
+      "settlement": "PoolManager settles the net caller delta at the end of the unlock.",
+      "failure": "Reverts on slippage breach or insufficient liquidity."
+    }
+  ],
+  "authorities": [
+    {
+      "role": "Programmable fee owner",
+      "controller": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+      "capabilities": ["claim the accrued 10 bps platform WETH liability to itself or an owner-selected destination per claim"],
+      "mutable": false,
+      "delay": null,
+      "userExitImpact": "Claiming the platform liability never touches reserve R, LP liquidity or any user's exit."
+    },
+    {
+      "role": "Immutable launch parameters",
+      "controller": "none (fixed at construction)",
+      "capabilities": ["floorBps, feeTotalBps, sinkMode and backedSupplyMode are set once at deployment and can never change"],
+      "mutable": false,
+      "delay": null,
+      "userExitImpact": "No party can weaken the floor mechanics, so the seller floor guarantee cannot be reduced."
+    },
+    {
+      "role": "Monotonic floor",
+      "controller": "hook code only (no actor)",
+      "capabilities": ["floorHigh only ratchets upward; no address can lower the floor"],
+      "mutable": false,
+      "delay": null,
+      "userExitImpact": "The floor can never be lowered, so an existing redemption right cannot be revoked."
+    }
+  ],
+  "dependencies": {
+    "onchain": [
+      {
+        "id": "v4-poolmanager",
+        "name": "Uniswap v4 PoolManager",
+        "kind": "protocol-singleton",
+        "repository": "https://github.com/Uniswap/v4-core",
+        "revision": null,
+        "packageVersion": "1.0.2",
+        "license": "MIT",
+        "sourceProvenance": "pinned-source",
+        "deploymentRecordId": "v4-poolmanager-ethereum",
+        "chainAddress": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "runtimeHash": null,
+        "deploymentEvidencePath": null,
+        "trust": "The immutable Ethereum-mainnet v4 PoolManager (address from the committed deployment record v4-poolmanager-ethereum). The hook compiles against @uniswap/v4-core 1.0.2 (Hooks/PoolKey/BalanceDelta types) per compatibility.lock.json. NOT YET runtime-verified: the deployed runtime bytecode hash and an independent runtime+source observation are not bound because the hook is not deployed and its suite runs against a locally-deployed fresh PoolManager (Deployers.sol), not the mainnet singleton.",
+        "failure": "A missing or mismatched PoolManager runtime blocks preparation; at runtime every callback is onlyPoolManager and any PoolManager revert reverts the whole swap atomically.",
+        "fallback": "No silent fallback; bind the exact mainnet runtime hash and a reproducible runtime+source observation before release, and let maintainers independently reproduce it."
+      }
+    ],
+    "offchain": []
+  },
+  "operations": {
+    "keeper": {
+      "required": false,
+      "actor": null,
+      "action": null,
+      "cadence": null,
+      "authentication": null,
+      "funding": null,
+      "failure": null,
+      "fallback": null
+    },
+    "oracle": {
+      "required": false,
+      "actor": null,
+      "action": null,
+      "cadence": null,
+      "authentication": null,
+      "funding": null,
+      "failure": null,
+      "fallback": null
+    },
+    "monitoring": "Index ProgrammableFeeCollected, FloorToppedUp, FloorRatcheted and ProgrammableFeeClaimed by PoolId and currency; alert when the confirmed hook quote (WETH) claim balance is not equal to programmableFeeOwed + reserveQuote, or when a FloorToppedUp topUp would exceed reserveQuote.",
+    "incidentResponse": "The immutable hook has no pause, rescue or redirect authority; on a confirmed solvency mismatch, publish the exact affected PoolId and reconstructed reserve; the floor and reserve remain governed only by code."
+  },
+  "integration": {
+    "routerGeneration": null,
+    "routerDependencyId": null,
+    "permit2DependencyId": null,
+    "stateViewDependencyId": null,
+    "quoterDependencyId": null,
+    "sdkDependencies": [
+      {
+        "packageName": "@openzeppelin/uniswap-hooks",
+        "version": "1.1.1",
+        "integrity": "sha512-DI5lNlNsWCcSbEGdc2SCmxpkAAjlnwf4a1MQcpPEO6kRi1OQUZwYwGG/n379wJdrcj5n0/z7uhZ/wWetG92lrQ==",
+        "repository": "https://github.com/OpenZeppelin/uniswap-hooks",
+        "revision": "a5f831963087d44a857ec41ddff4da01949f38ff"
+      },
+      {
+        "packageName": "@openzeppelin/contracts",
+        "version": "5.5.0",
+        "integrity": "sha512-R8hq4zmKKWP2c7OxeRgAcjZwvF5W0Qq2OIX7degrtdM52Q9xYr4MLJdUAVPKGUewNJ1qo+M6YiZLLnNUnjP/gg==",
+        "repository": null,
+        "revision": null
+      },
+      {
+        "packageName": "@uniswap/v4-core",
+        "version": "1.0.2",
+        "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg==",
+        "repository": null,
+        "revision": null
+      },
+      {
+        "packageName": "@uniswap/v4-periphery",
+        "version": "1.0.3",
+        "integrity": "sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg==",
+        "repository": null,
+        "revision": null
+      }
+    ],
+    "routerActionProfile": {
+      "routerVersionExplicit": null,
+      "universalRouterCommand": null,
+      "v4Actions": [],
+      "settlementMode": null,
+      "permit2Mode": null,
+      "finalSwapDeltaValidated": null
+    },
+    "appSourcePaths": [],
+    "integrationTestPaths": [],
+    "quoteExecutionParity": null,
+    "swapModes": ["zeroForOne-exactInput", "zeroForOne-exactOutput", "oneForZero-exactInput", "oneForZero-exactOutput"],
+    "partialFills": "Only executed amounts are charged and honored; unfilled portions create no fee, reserve change or floor obligation.",
+    "slippage": "The trader's minimum output or maximum input is enforced by the external router against the final caller delta after the floor honor and the fee.",
+    "deadline": "Enforced by the external router; the hook adds no separate deadline.",
+    "permit2": "Handled by the external router; the hook holds no token allowances.",
+    "stateReads": "R, floorHigh and S_backed are read from hook storage within the unlock; no external state is read.",
+    "events": [
+      "ProgrammableFeeCollected(PoolId indexed poolId,Currency indexed currency,uint256 platformAmount,uint256 projectAmount)",
+      "ProgrammableFeeClaimed(PoolId indexed poolId,Currency indexed currency,address indexed destination,uint256 amount)",
+      "FloorRatcheted(PoolId indexed poolId,uint256 floorHigh)",
+      "FloorToppedUp(PoolId indexed poolId,address indexed swapper,uint256 tknIn,uint256 topUp,uint256 floorHigh)"
+    ],
+    "routingAndDiscoverability": {
+      "routingMode": "not-planned",
+      "allowlistTriggers": {
+        "usesDeltaFlag": true,
+        "addressStartsWith91": false,
+        "targetsMajorPair": false,
+        "permissionedPool": false
+      },
+      "uniswapRoutingStatus": "not-applicable",
+      "hookRegistryStatus": "not-submitted",
+      "customHookDataRequired": false,
+      "standardRouterCompatible": true,
+      "permissionedRouting": {
+        "required": false,
+        "minimumRouterGeneration": null,
+        "adapterCurrencyUsed": null,
+        "allowedWrapperBindings": null,
+        "positionManagerBinding": null,
+        "routingAllowlistRequiredPerChain": null
+      },
+      "sourcePaths": [],
+      "testPaths": []
+    },
+    "dataReconstruction": {
+      "mode": "events-with-confirmed-reads",
+      "eventCoverage": "ProgrammableFeeCollected reconstructs every platform (10 bps) and project (20 bps) accrual; FloorToppedUp reconstructs every reserve-funded top-up; FloorRatcheted every floor-high increase; ProgrammableFeeClaimed every platform claim. The confirmed hook ERC-6909 quote (WETH) balance plus the reserveQuote() and programmableFeeOwed(poolId,currency) getters reconcile the backing (balance == reserveQuote + programmableFeeOwed).",
+      "cursor": "block-number-transaction-index-log-index",
+      "startBlockPolicy": "Index from the block in which the canonical pool was initialized and bound at _afterInitialize (the pool's PoolManager Initialize log).",
+      "finalityDepth": 12,
+      "reorgPolicy": "Roll back to the last finalized cursor and replay; never report a reserve or floor from an unfinalized block.",
+      "backfillPolicy": "Deterministic replay from the start block reconstructs R, floorHigh and all liabilities exactly.",
+      "checkpointPolicy": "Checkpoint R, floorHigh and liabilities at each finalized block.",
+      "freshnessTargetSeconds": 60,
+      "staleAfterSeconds": 300,
+      "freshnessMeasurement": "Wall-clock lag between chain head and the last indexed finalized block.",
+      "reconciliation": "At one confirmed block, event-derived programmableFeeOwed + reserveQuote must equal the hook's ERC-6909 quote (WETH) balance; withhold results on any mismatch.",
+      "reserveReconstruction": {
+        "used": true,
+        "balanceSources": ["Hook ERC-6909 quote (WETH, currency0) claim balance in PoolManager at one confirmed block"],
+        "liabilitySources": ["ProgrammableFeeCollected, FloorToppedUp and ProgrammableFeeClaimed logs plus the programmableFeeOwed(poolId,currency) and reserveQuote() contract reads"],
+        "attributionKeys": ["poolId", "currency", "beneficiary"],
+        "solvencyEquation": "Confirmed hook ERC-6909 quote (WETH) balance == programmableFeeOwed + reserveQuote (>= as the safety bound); reserveQuote >= 0; pool LP liquidity excluded from hook reserves.",
+        "poolLiquidityTreatment": "excluded-from-hook-reserves",
+        "donationAndDustPolicy": "A direct token transfer to the hook does not become an ERC-6909 claim, creates no liability and is excluded from claimable amounts; no admin can sweep or attribute the excess.",
+        "reconciliation": "Rebuild liabilities from finalized events, compare with the programmableFeeOwed/reserveQuote getters and the gross claim balance, and withhold results whenever any value disagrees."
+      },
+      "sourcePaths": ["src/AntifragileFloorHook.sol", "src/lib/FloorMath.sol"],
+      "testPaths": ["test/FloorHonor.t.sol", "test/invariant/AntifragileInvariants.t.sol", "test/invariant/AntifragileDrainInvariant.t.sol", "test/invariant/AntifragileTwoPoolInvariant.t.sol"]
+    },
+    "platformHandoff": {
+      "intended": true,
+      "websiteRegistryPath": null,
+      "uiSourcePaths": [],
+      "apiSourcePaths": [],
+      "indexerSourcePaths": [],
+      "testPaths": [],
+      "reviewStatus": "not-requested",
+      "maintainerReviewRequired": true,
+      "selfApproval": false,
+      "availabilityClaimed": false,
+      "handoffNotes": "The single custom hook is implemented (src/AntifragileFloorHook.sol + src/lib/FloorMath.sol, 70 tests green) and is the review target: the quadrant-dependent mandatory fee, the owner-only claimable liability, and the monotonic reserve-funded floor top-up. No product UI, API or indexer surface is implemented yet; those, and any deployment, remain future maintainer-owned handoff work requiring separate review."
+    }
+  },
+  "projectSurfaces": [
+    {
+      "id": "antifragile-floor-hook",
+      "kind": "onchain-contract",
+      "name": "Antifragile Floor hook",
+      "summary": "The single custom v4 hook that enforces the monotonic price floor, custodies the WETH reserve as ERC-6909 claims, and accrues the mandatory volume fee on the canonical WETH/FLOOR pool.",
+      "executionBoundary": "onchain",
+      "capabilityIds": ["floor-reserve-accounting", "programmable-fee-accrual", "enforced-monotonic-redemption-floor"],
+      "authorityRefs": ["Programmable fee owner", "Immutable launch parameters", "Monotonic floor"],
+      "valueFlowRefs": ["swap-volume-charge", "programmable-fee-accrual", "reserve-skim", "floor-topup", "programmable-fee-claim"],
+      "assetRefs": ["weth", "floor-token"],
+      "sourcePaths": ["src/AntifragileFloorHook.sol", "src/lib/FloorMath.sol"],
+      "testPaths": ["test/ProgrammableFee.t.sol", "test/FloorHonor.t.sol", "test/FloorMath.t.sol", "test/AntifragileFloorHook.t.sol", "test/Reentrancy.t.sol", "test/HardValues.t.sol", "test/ReserveDrainExploit.t.sol", "test/invariant/AntifragileInvariants.t.sol", "test/invariant/AntifragileDrainInvariant.t.sol", "test/invariant/AntifragileTwoPoolInvariant.t.sol"],
+      "schemaPaths": [],
+      "evidencePaths": ["docs/FLOOR.md", "docs/PROGRAMMABLE_FEE.md", "compatibility.lock.json"],
+      "exposure": {
+        "movesValue": true,
+        "usesSignatures": false,
+        "makesExternalCalls": true,
+        "holdsCustody": true,
+        "handlesPii": false,
+        "usesGeolocation": false,
+        "usesSecrets": false
+      },
+      "profiles": {
+        "authority": {
+          "status": "applicable",
+          "summary": "PoolManager callback authentication, the immutable Programmable owner and the immutable floor parameters govern every privileged action on this boundary.",
+          "controls": ["Authenticate every callback through the exact immutable PoolManager and the bound canonical PoolId.", "Bind the immutable Programmable owner as the sole platform-claim authority and forbid any admin mutation."],
+          "evidenceRefs": []
+        },
+        "valueFlow": {
+          "status": "applicable",
+          "summary": "The hook accrues the volume charge, funds reserveQuote and pays exact-input sellers a reserve-funded top-up toward the floor, so every value flow is bound and conserved.",
+          "controls": ["Bind each accrual, top-up and claim to a declared value-flow id and conserve the quote across programmableFeeOwed and reserveQuote (balance == reserveQuote + owed)."],
+          "evidenceRefs": []
+        },
+        "sourceOfTruth": {
+          "status": "applicable",
+          "summary": "Confirmed PoolManager and hook storage for the exact chain and PoolId is the authoritative source for reserveQuote, floorHigh, programmableFeeOwed and the tkn totalSupply().",
+          "controls": ["Key every state read and emitted event by the exact chain, model revision and canonical PoolId."],
+          "evidenceRefs": []
+        },
+        "signaturesReplay": {
+          "status": "not-applicable",
+          "summary": "The hook consumes no model-specific signed message and reads no signed offchain payload; all behavior derives from aggregate pool state.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "externalCalls": {
+          "status": "applicable",
+          "summary": "The hook settles quote (WETH) deltas through PoolManager and reads the tkn totalSupply(); there is no token sink. External interactions must be failure-isolated.",
+          "controls": ["Use checks-effects-interactions and revert the whole swap on any failed take, settle or claim."],
+          "evidenceRefs": []
+        },
+        "custody": {
+          "status": "applicable",
+          "summary": "The hook custodies reserveQuote and the platform liability as ERC-6909 quote (WETH) claims; the top-up is backed 1:1 by reserveQuote and there is no token-side custody.",
+          "controls": ["Maintain hook quote-claim balance == reserveQuote + programmableFeeOwed at every block and exclude pool LP liquidity from reserves."],
+          "evidenceRefs": []
+        },
+        "piiGeolocation": {
+          "status": "not-applicable",
+          "summary": "The onchain hook collects no private identity data and no precise user geolocation.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "secretBoundary": {
+          "status": "not-applicable",
+          "summary": "The onchain hook assumes no secret can remain confidential in contract state or calldata.",
+          "controls": [],
+          "evidenceRefs": []
+        },
+        "sourceTestSchema": {
+          "status": "applicable",
+          "summary": "The implementation manifest binds the exact hook source (src/AntifragileFloorHook.sol, src/lib/FloorMath.sol), tests and the compiler build-info reviewed for this boundary.",
+          "controls": ["Bind prototype source and tests to implementation paths and include every imported executable byte in the review target."],
+          "evidenceRefs": []
+        },
+        "failureRecovery": {
+          "status": "applicable",
+          "summary": "A checked-conversion or settlement failure reverts atomically; a reserve too small for the floor is honored partially (whole reserve paid), never reverted, and never blocks a buy, a sell or liquidity removal.",
+          "controls": ["Test partial honor (reserve exhausted), executed-vs-requested tkn sizing, ceil rounding and settlement failure without partial settlement or trapped funds."],
+          "evidenceRefs": []
+        }
+      },
+      "signedDataSource": {
+        "used": false,
+        "signerAuthorityRefs": [],
+        "signatureScheme": null,
+        "payloadSchemaPath": null,
+        "freshnessRule": null,
+        "replayProtection": null,
+        "onchainVerifierSurfaceId": null
+      },
+      "onchainOracleVerifier": {
+        "used": false,
+        "verifiedSourceSurfaceIds": [],
+        "verificationRule": null,
+        "freshnessRule": null,
+        "replayProtection": null,
+        "failureRule": null
+      }
+    }
+  ],
+  "projectCapabilities": [
+    {
+      "id": "floor-reserve-accounting",
+      "kind": "custom-accounting-reserve",
+      "summary": "Custody the quote (WETH) reserve as ERC-6909 claims and pay exact-input sellers a reserve-funded top-up toward the monotonic floor, capped at the reserve (partial honor), with no admin withdrawal path.",
+      "surfaceIds": ["antifragile-floor-hook"],
+      "securityTriggers": {
+        "authority": true,
+        "valueFlow": true,
+        "sourceOfTruth": true,
+        "signaturesReplay": false,
+        "externalCalls": true,
+        "custody": true,
+        "piiGeolocation": false,
+        "secretBoundary": false,
+        "sourceTestSchema": true,
+        "failureRecovery": true
+      },
+      "requiredProfiles": ["authority", "value-flow", "source-of-truth", "external-calls", "custody", "source-test-schema", "failure-recovery"]
+    },
+    {
+      "id": "programmable-fee-accrual",
+      "kind": "mandatory-volume-fee",
+      "summary": "Accrue the effective 30 bps hook-owned volume charge as a 10 bps owner-only claimable liability plus a 20 bps reserve credit on every canonical-pool swap.",
+      "surfaceIds": ["antifragile-floor-hook"],
+      "securityTriggers": {
+        "authority": true,
+        "valueFlow": true,
+        "sourceOfTruth": true,
+        "signaturesReplay": false,
+        "externalCalls": false,
+        "custody": true,
+        "piiGeolocation": false,
+        "secretBoundary": false,
+        "sourceTestSchema": true,
+        "failureRecovery": true
+      },
+      "requiredProfiles": ["authority", "value-flow", "source-of-truth", "custody", "source-test-schema", "failure-recovery"]
+    },
+    {
+      "id": "enforced-monotonic-redemption-floor",
+      "kind": "enforced-price-floor",
+      "summary": "Enforce a ratchet-only floor delivered as an afterSwapReturnDelta top-up on exact-input sells, paid from the reserve toward floorHigh = max high-water of reserveQuote/totalSupply, capped at the reserve, with no party able to lower it.",
+      "surfaceIds": ["antifragile-floor-hook"],
+      "securityTriggers": {
+        "authority": true,
+        "valueFlow": true,
+        "sourceOfTruth": true,
+        "signaturesReplay": false,
+        "externalCalls": true,
+        "custody": true,
+        "piiGeolocation": false,
+        "secretBoundary": false,
+        "sourceTestSchema": true,
+        "failureRecovery": true
+      },
+      "requiredProfiles": ["authority", "value-flow", "source-of-truth", "external-calls", "custody", "source-test-schema", "failure-recovery"]
+    }
+  ],
+  "capabilities": {
+    "externalCalls": {
+      "used": true,
+      "targets": [
+        "PoolManager take (claims=true, mint) and settle (burn=true) for the quote (WETH, currency0) ERC-6909 claims",
+        "The standard mainnet WETH ERC-20 on the owner claim payout path (take underlying to the destination)",
+        "IERC20(tknCurrency).totalSupply() view read to compute the floor's backedSupply"
+      ],
+      "callSites": [
+        "beforeSwap fee collection (before-quadrants)",
+        "afterSwap fee collection, floor ratchet and reserve-funded top-up",
+        "claimProgrammableFee / unlockCallback owner claim of the platform liability"
+      ],
+      "reentrancyPolicy": "All entry points are PoolManager-authenticated callbacks or the owner-only claim and follow checks-effects-interactions; no external call observes an unchanged reserve or liability balance.",
+      "stateDriftPolicy": "The quote is standard WETH; the tkn's totalSupply() is read only to size the floor (a larger supply yields a lower, safer floor). Every balance change is settled exactly through PoolManager.",
+      "returnValuePolicy": "Use SafeERC20 or checked settlement and revert the whole action on any failed take, settle, sink or transfer.",
+      "failureAtomicity": "A reverted or malformed settlement reverts the prior ledger changes and cannot alter another PoolId, currency or beneficiary key."
+    },
+    "permissionedAsset": { "used": false, "officialUniswapPermissionedPool": null, "issuer": null, "jurisdiction": null, "legalDocuments": [], "underlyingClaim": null, "custodian": null, "adapter": null, "hooks": null, "positionManager": null, "swapEligibility": null, "liquidityEligibility": null, "positionTransferability": null, "pauseFreezeUnwind": null, "redemption": null, "routingLimitations": null },
+    "oracle": { "used": false, "source": null, "value": null, "deployment": null, "runtimeHash": null, "decimals": null, "heartbeatSeconds": null, "maxAgeSeconds": null, "observationType": null, "windowSeconds": null, "minimumAnswer": null, "maximumAnswer": null, "maximumDeviation": null, "roundChecks": null, "manipulationResistance": null, "governance": null, "fallback": null, "maxFallbackAgeSeconds": null, "failureRule": null },
+    "keeper": { "used": false, "executionMode": null, "minIntervalSeconds": null, "maxDelaySeconds": null, "permissionlessFallbackAfterSeconds": null, "idempotencyKey": null, "duplicateBehavior": null, "lastProcessedState": null, "boundedWork": null, "maxItems": null, "retryPolicy": null, "zeroWorkBehavior": null, "fundingSource": null, "minimumGasRunway": null, "alertThreshold": null, "maximumGas": null, "failureImpact": null, "userExitIndependent": null, "poolBinding": null, "slippage": null, "deadline": null, "mevPolicy": null },
+    "proof": { "used": false, "proofSystem": null, "circuitRevision": null, "verifyingKeyHash": null, "verifierAddress": null, "runtimeHash": null, "setupType": null, "setupProvenance": null, "publicInputs": [], "domainBindings": { "chainId": null, "verifyingContract": null, "modelVersion": null, "pool": null, "action": null, "actorOrRecipient": null, "amountBounds": null, "epochOrDeadline": null }, "replayMode": null, "nullifierScope": null, "nullifierDerivation": null, "nullifierStorage": null, "atomicSpentCheck": null, "resetPolicy": null, "maximumProofBytes": null, "maximumVerificationGas": null, "verifierAuthority": null, "failureRule": null, "privacyClaim": null, "metadataLeakage": null },
+    "crossChain": {
+      "used": false,
+      "bridgeDependencyId": null,
+      "source": { "network": { "namespace": null, "reference": null }, "domain": null, "authenticatedSender": { "encoding": null, "value": null, "canonicalizationRule": null } },
+      "destination": { "chainId": null, "domain": null, "receiver": null, "receiverDependencyId": null, "authenticatedBridgeCaller": null },
+      "message": { "identifierDerivation": null, "nonceDerivation": null, "nonceScope": null, "customNonceRule": null, "payloadHashRule": null, "idempotencyKeyRule": null, "idempotencyStorage": null, "atomicConsumption": null, "duplicateBehavior": null, "domainBindings": { "bridgeDependencyId": null, "sourceNetwork": null, "sourceDomain": null, "sourceSender": null, "destinationChainId": null, "destinationDomain": null, "receiver": null, "receiverDependencyId": null, "modelId": null, "poolId": null, "action": null, "payloadHash": null, "timestampOrExpiry": null, "messageId": null, "nonce": null } },
+      "finality": { "mode": null, "minimumSourceConfirmations": null, "challengePeriodSeconds": null, "attestationRule": null, "reorgBehavior": null, "customFinalityRule": null },
+      "ordering": { "mode": null, "sequenceKey": null, "outOfOrderBehavior": null, "maximumPendingMessages": null, "queueOverflowBehavior": null, "pendingMessageExpirySeconds": null, "cleanupRule": null, "releaseRule": null },
+      "staleness": { "timestampSource": null, "customTimestampRule": null, "maximumMessageAgeSeconds": null, "maximumFutureSkewSeconds": null, "staleMessageBehavior": null },
+      "failureBehavior": null,
+      "failureRule": null,
+      "fallback": { "mode": null, "authority": null, "rule": null },
+      "quarantine": { "used": null, "storageRule": null, "maximumEntries": null, "entryExpirySeconds": null, "overflowBehavior": null, "cleanupRule": null, "releaseMode": null, "releaseRule": null, "releaseAuthority": null, "atomicRelease": null }
+    },
+    "externalLiquidity": {
+      "used": true,
+      "custody": "The floor reserve reserveQuote is hook-held quote (WETH) custodied as ERC-6909 claims in PoolManager, funded solely by the 20 bps project slice of the volume fee; no external party deposits into it.",
+      "ownership": "The reserve is owned by the hook contract and is not a share-based LP position; it backs only the seller floor top-up and is never withdrawable by any admin, builder or project role.",
+      "shareAccounting": "No shares are issued; the reserve is a single pool-scoped scalar reserveQuote, reconstructable from ProgrammableFeeCollected and FloorToppedUp events plus the reserveQuote getter.",
+      "solvencyEquation": "hook ERC-6909 quote (WETH) balance in PoolManager == reserveQuote + programmableFeeOwed at every confirmed block (>= as the safety bound); reserveQuote >= 0; pool LP liquidity is excluded from hook reserves.",
+      "lossAllocation": "The reserve can only decrease by paying sellers a top-up toward the floor; there is no third-party depositor to bear loss. floorHigh is monotonic and the top-up is capped at reserveQuote, so a drain leaves floorHigh unchanged and only reduces future payout capacity (disclosed partial honor).",
+      "donationPolicy": "Direct WETH transfers to the hook do not become ERC-6909 claims and are excluded from reserveQuote; no admin can sweep or attribute the excess.",
+      "exitPath": "Exact-input sellers receive a top-up toward the floor from reserveQuote; there is no LP-style redemption of the reserve itself.",
+      "dependencyFailure": "The reserve depends only on the immutable PoolManager; a PoolManager revert reverts the swap atomically and never strands the reserve."
+    },
+    "asyncSwap": { "used": false, "supportedExactness": null, "custody": null, "fillRule": null, "partialFillRule": null, "cancellation": null, "expiry": null, "refund": null, "queueBound": null, "liveness": null, "failureRule": null },
+    "customCurve": { "used": false, "invariant": null, "domain": null, "rounding": null, "monotonicity": null, "discontinuities": null, "inverse": null, "differentialReference": null, "failureRule": null }
+  },
+  "capabilityExtensions": [
+    {
+      "capabilityId": "enforced-monotonic-redemption-floor",
+      "summary": "A hook-enforced, ratchet-only price floor delivered as an afterSwap reserve-funded top-up on exact-input sells (NOT a custom curve: the core AMM leg is always the full swap). The reserve is funded by the pool's own volume; novel relative to buyback and savings-vault catalog entries.",
+      "interactionRefs": ["hook.postReturnDeltaAccounting.afterSwap", "valueFlows.floor-topup", "valueFlows.reserve-skim"],
+      "trustBoundary": "The floor is computed only from internal hook state (reserveQuote, floorHigh) and the tkn totalSupply(), with no oracle, keeper or admin; floorHigh only ratchets upward and every top-up is capped at reserveQuote (backed 1:1), so no party can lower the floor or drain the reserve to a third party. The top-up is sized on the EXECUTED tkn input (from the swap delta), never the requested amount, closing a partial-fill reserve-drain (fixed at commit cd2109a).",
+      "failureMode": "If the reserve cannot reach the floor target, the hook pays the whole reserve (reserveQuote -> 0) as a partial honor and never reverts; it never returns an unbacked or no-op delta and never pays more than the reserve. FAIRNESS INVARIANT: the fee is charged only on the executed AMM quote volume, never on the subsidy, so the top-up never inflates the fee basis.",
+      "schemaPath": null,
+      "sourcePaths": ["src/AntifragileFloorHook.sol", "src/lib/FloorMath.sol"],
+      "testPaths": ["test/FloorHonor.t.sol", "test/FloorMath.t.sol", "test/invariant/AntifragileInvariants.t.sol", "test/invariant/AntifragileDrainInvariant.t.sol", "test/ReserveDrainExploit.t.sol"],
+      "evidencePaths": ["docs/FLOOR.md"]
+    }
+  ],
+  "tokenBehaviorExtensions": [],
+  "security": {
+    "usesTxOrigin": false,
+    "userControlledDelegatecall": false,
+    "arbitraryExecution": false,
+    "unboundedCriticalLoop": false,
+    "ignoredCallResults": false,
+    "hiddenControls": false,
+    "assumesOnchainSecrecy": false,
+    "bypassesHookAddressValidation": false,
+    "signatureScheme": {
+      "used": false,
+      "standard": null,
+      "nonce": null,
+      "deadline": null,
+      "chain": null,
+      "verifyingContract": null,
+      "action": null,
+      "parameters": null,
+      "erc1271": null
+    }
+  },
+  "implementation": {
+    "sourcePaths": ["src/AntifragileFloorHook.sol", "src/lib/FloorMath.sol"],
+    "testPaths": [
+      "test/ProgrammableFee.t.sol",
+      "test/FloorHonor.t.sol",
+      "test/FloorMath.t.sol",
+      "test/AntifragileFloorHook.t.sol",
+      "test/Reentrancy.t.sol",
+      "test/HardValues.t.sol",
+      "test/ReserveDrainExploit.t.sol",
+      "test/invariant/AntifragileInvariants.t.sol",
+      "test/invariant/AntifragileDrainInvariant.t.sol",
+      "test/invariant/AntifragileTwoPoolInvariant.t.sol"
+    ],
+    "compilerBuildInfoPaths": ["out/build-info/b72754b987f1dfb2.json"],
+    "specificationPath": "docs/PROGRAMMABLE_FEE.md",
+    "testEvidencePath": ".gas-snapshot",
+    "dependencyLockPath": "compatibility.lock.json",
+    "gateStatusPath": null,
+    "reviewTargetPath": null,
+    "runtimeAssetManifestPath": null
+  },
+  "risk": {
+    "dimensions": {
+      "complexity": 3,
+      "customMath": 2,
+      "externalDependencies": 1,
+      "externalLiquidity": 1,
+      "valueAtRisk": 3,
+      "teamMaturity": 1,
+      "upgradeability": 0,
+      "autonomy": 0,
+      "priceImpact": 2
+    },
+    "rationales": {
+      "complexity": "Quadrant-dependent before/after fee return deltas, an afterSwap monotonic floor ratchet and a reserve-funded top-up netted with the fee, and an ERC-6909 quote-claim ledger interact within one unlock.",
+      "customMath": "The arithmetic is a bounded ceil basis-point charge plus a floorPrice = reserveQuote * 1e18 / totalSupply ratio, a monotonic ratchet, and a reserve-capped top-up sized on executed tkn, with explicit directional rounding (fee ceil, top-up floor).",
+      "externalDependencies": "The onchain dependencies are the immutable v4 PoolManager and standard WETH; there is no oracle, keeper, bridge or upgrade dependency.",
+      "externalLiquidity": "The hook custodies a WETH reserve that backs the seller floor guarantee; although internal and volume-funded, it is a redeemable reserve exposure and is scored at least one.",
+      "valueAtRisk": "Reserve R holds real WETH that must remain solvent to honor the floor, so the reserve backing is the primary value at risk.",
+      "teamMaturity": "A conservative nonzero process score remains until independent accounting and security reviews complete.",
+      "upgradeability": "The hook, floor mechanics, fee rate and parameters are immutable for the pool.",
+      "autonomy": "No keeper, oracle, scheduler or autonomous parameter can change the floor, fee or reserve; floorHigh only ratchets up by code.",
+      "priceImpact": "The bounded fee and the floor honor change the caller's final input or output but never replace core price formation above the floor."
+    },
+    "declaredTotal": 13,
+    "declaredTier": "high",
+    "featureTriggers": ["custom-accounting", "custom-math", "external-calls", "external-liquidity", "hook-held-liquidity", "price-impact", "project-custody", "project-external-calls", "project-value-flow", "return-delta"]
+  },
+  "disclosures": [
+    "This is a PROTOTYPE record bound to the implemented hook (src/AntifragileFloorHook.sol + src/lib/FloorMath.sol) at git commit cd2109a, with a green Foundry suite. It is NOT deployed, independently reviewed, audited, routed or available through Programmable; local tests prove only the declared rules for this revision.",
+    "The floor mechanism is an afterSwap RESERVE-FUNDED TOP-UP, not a beforeSwap redemption and not a custom curve: the core AMM executes the FULL swap first (the AMM leg is always the full swap, never zero), and only then does the hook subsidise an exact-input seller from the reserve toward the monotonic floorHigh. This supersedes the earlier proposal-stage 'below-floor redemption with token sink' design, which was NOT shipped. There is no token sink; a seller's whole token amount reaches the AMM.",
+    "The top-up is sized on the EXECUTED tkn the pool actually received (read from the swap BalanceDelta), never the requested |amountSpecified|. This closes a CRITICAL reserve-drain a price-limited partial fill would otherwise cause (fixed at commit cd2109a; regression test test/ReserveDrainExploit.t.sol).",
+    "FAIRNESS INVARIANT: the mandatory fee is charged only on the executed AMM quote volume (ammQuoteOut), never on the subsidised gross; the top-up is a pure seller subsidy and never inflates the fee basis (proven by test_10_feeBasisUnchangedByTopUp).",
+    "The hook-owned volume charge is a single effective 30 bps taken INCLUSIVELY (feeTotalBps = 30), split 10 bps to the immutable Programmable owner (0x4957f49620AFf3Adbbe8195a4f633E49cc93376c) and 20 bps to the floor reserve; it is not added on top of the platform fee (3% stays 3%, never 3.1%), and it is separate from the pool LP fee owned by liquidity providers. Fee amounts round UP (ceil, protocol favor), and platform + project == total exactly.",
+    "The floor benefits exact-input sellers: floorHigh only ratchets up and every top-up is capped at the live reserveQuote (backed 1:1). If the reserve cannot reach the floor target, the seller is honored PARTIALLY (the whole reserve is paid, reserveQuote -> 0) and never reverted; the hook never returns an unbacked or no-op delta and never pays out more quote than it holds (hook ERC-6909 quote balance == reserveQuote + programmableFeeOwed, solvent by construction).",
+    "The reserve and the platform liability are held transparently as the hook's ERC-6909 quote (WETH) claims in PoolManager; no admin, builder or project role can withdraw, sweep or redirect either, and no party can lower the floor. Only the immutable owner can claim the platform liability (claimProgrammableFee), to an owner-selected destination per claim.",
+    "There is no oracle, keeper, upgrade path or admin control; floorHigh is computed only from internal state: floorHigh = max(floorHigh, reserveQuote * 1e18 / totalSupply(tkn)). backedSupply uses the tkn's full totalSupply() (the conservative choice, yielding the lowest/safest floor). The launched token is a standard fixed-supply ERC-20 with no mint, freeze, blacklist or confiscation authority.",
+    "v1 tops up EXACT-INPUT sells only (the panic-dump case); exact-output sells and all buys pay the fee and trade at the AMM, with the floor bounding price via arbitrage. Collection is quadrant-dependent (collect BEFORE iff the quote is the swap's specified currency, else AFTER); for the canonical WETH=currency0 quote pool the paths are before/after/after/before.",
+    "The hook is deployed at a mined CREATE2 address whose low bits equal the permission mask 0x10cc (afterInitialize | beforeSwap | afterSwap | beforeSwapReturnDelta | afterSwapReturnDelta); the exact deployed hook address, the mined CREATE2 salt, the mainnet PoolManager runtime hash and the canonical PoolId are not yet pinned (the hook is not deployed and the suite runs against a locally-deployed fresh PoolManager, not the mainnet singleton), and remain maintainer-owned handoff work.",
+    "No off-chain product surface (UI/API/indexer) is implemented; data reconstruction is proven on-chain by the solvency/invariant suite, but a productionized indexer remains future maintainer-owned handoff work.",
+    "docs/FLOOR.md section 3 example text uses tknIn = |amountSpecified| for illustration; the shipped code sizes the top-up on the EXECUTED tkn input (execTknIn) per the security fix at commit cd2109a — the doc prose should be reconciled to the implementation."
+  ],
+  "unresolved": []
+}

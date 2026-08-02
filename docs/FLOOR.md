@@ -51,7 +51,7 @@ direction from `quoteCurrency` being `currency0` or `currency1`, so it works whe
 token0 or token1.
 
 ```
-tknIn        = |amountSpecified|                      // the TKN offered by the sell
+tknIn        = executed TKN the pool received         // from the swap BalanceDelta TKN side — NOT |amountSpecified|
 ammQuoteOut  = the quote the AMM actually produced    // from the swap BalanceDelta quote side (executed)
 targetGross  = floorHigh * tknIn / 1e18
 topUp        = ammQuoteOut >= targetGross ? 0 : min(targetGross - ammQuoteOut, reserveQuote)
@@ -61,9 +61,15 @@ If `topUp > 0` the hook burns `topUp` of its quote ERC-6909 claims (`reserveQuot
 it to the seller as an additional `afterSwap` return-delta. **The seller receives
 `ammQuoteOut − fee + topUp`.**
 
-Using `tknIn = |amountSpecified|` (the *offered* amount) makes the floor target the seller's full
-intent; since the payout is always capped by `reserveQuote`, this can never break solvency even if a
-price-limited swap partially fills.
+`tknIn` is the **executed** TKN the pool actually received on this swap — read from the swap
+`BalanceDelta` (the TKN-side delta the swapper paid in), **not** the requested `|amountSpecified|`.
+This is load-bearing when a swap **partially fills**: a tight `sqrtPriceLimitX96` can execute only a
+sliver of the offered TKN, so `|amountSpecified|` may be far larger than the TKN the pool actually took
+in. Sizing the subsidy on the *requested* amount would pay a floor top-up for TKN that was never
+delivered — the critical reserve-drain closed by the security fix at `cd2109a`. Sizing it on the
+executed `tknIn` makes the top-up match exactly what the seller actually sold; the payout is still
+additionally capped by `reserveQuote`, so the floor can never be over-subsidised and solvency always
+holds, even on a price-limited partial fill.
 
 ### 4. Fee vs. subsidy — the fee basis is unchanged
 

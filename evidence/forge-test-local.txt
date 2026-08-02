@@ -1,0 +1,197 @@
+# forge test (local suite; fork tests excluded) — commit cd2109aeb0f7bc3c99b32225c171c1e5fd868330
+# forge Version: 1.7.1 | solc 0.8.26 cancun | optimizer runs=200 | fuzz runs=256 invariant runs=256
+
+No files changed, compilation skipped
+Ran 3 tests for test/AntifragileFloorHook.t.sol:AntifragileFloorHookTest
+[PASS] test_constructor_wiring() (gas: 19078)
+[PASS] test_getHookPermissions_exactlyFiveFlags() (gas: 19940)
+[PASS] test_hookAddress_encodesMask0x10cc() (gas: 5526)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 379.93ms (844.90µs CPU time)
+Ran 4 tests for test/Reentrancy.t.sol:ReentrancyTest
+[PASS] test_callbacks_onlyPoolManager() (gas: 20436837)
+[PASS] test_reentrantToken_asQuote_blocked() (gas: 21527079)
+[PASS] test_reentrantToken_asTkn_blocked() (gas: 10046534)
+[PASS] test_revertingToken_atomicNoStuckState() (gas: 9818426)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 450.62ms (1.16s CPU time)
+Ran 14 tests for test/HardValues.t.sol:HardValuesTest
+[PASS] test_initializeTwice_reverts() (gas: 21071164)
+[PASS] test_junkHookData_ignored_quote0() (gas: 21178935)
+[PASS] test_junkHookData_ignored_quote1() (gas: 9704066)
+[PASS] test_nearMaxAmount_noCorruption_quote0() (gas: 21930112)
+[PASS] test_nearMaxAmount_noCorruption_quote1() (gas: 10522620)
+[PASS] test_nonOwnerClaim_reverts_quote0() (gas: 21180760)
+[PASS] test_nonOwnerClaim_reverts_quote1() (gas: 9698809)
+[PASS] test_oneWeiSwap_quote0() (gas: 21096039)
+[PASS] test_oneWeiSwap_quote1() (gas: 9620951)
+[PASS] test_ownerClaim_unknownPool_isNoop() (gas: 20999034)
+[PASS] test_runtimeBytecodeUnderEip170_andInitcodeSize() (gas: 20985829)
+[PASS] test_wrongPool_notQuotePool_reverts() (gas: 22026616)
+[PASS] test_zeroAmountSwap_reverts_quote0() (gas: 21010330)
+[PASS] test_zeroAmountSwap_reverts_quote1() (gas: 9535098)
+Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 474.52ms (4.33s CPU time)
+Ran 10 tests for test/FloorHonor.t.sol:FloorHonorTest
+[PASS] testFuzz_08_solvencyInvariant(uint256) (runs: 24, μ: 10634668, ~: 10633087)
+[PASS] test_01_sellBelowFloor_toppedUp_quote1() (gas: 9962008)
+[PASS] test_02_smallSellAboveFloor_noTopUp() (gas: 9811880)
+[PASS] test_03_partialHonor_reserveExhausted() (gas: 9954715)
+[PASS] test_04_floorHigh_monotonic() (gas: 10425437)
+[PASS] test_05_buysNeverToppedUp() (gas: 9893995)
+[PASS] test_06_sellBelowFloor_toppedUp_quote0() (gas: 21442583)
+[PASS] test_07_exactOutputSell_noTopUp_noRevert() (gas: 9811557)
+[PASS] test_09_entrypointsAreOnlyPoolManager() (gas: 9170547)
+[PASS] test_10_feeBasisUnchangedByTopUp() (gas: 9958812)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 2.45s (4.30s CPU time)
+Ran 13 tests for test/FloorMath.t.sol:FloorMathTest
+[PASS] testFuzz_floorPrice_zero_supply(uint256) (runs: 256, μ: 3594, ~: 3594)
+[PASS] testFuzz_honor_never_exceeds_reserve(uint256,uint256,uint256) (runs: 256, μ: 10350, ~: 10207)
+[PASS] testFuzz_honor_never_overpays_value(uint256,uint256,uint256) (runs: 256, μ: 9834, ~: 9691)
+[PASS] testFuzz_ratchet_monotonic(uint256,uint256) (runs: 256, μ: 3563, ~: 3554)
+[PASS] test_floorPrice_basic() (gas: 3654)
+[PASS] test_floorPrice_zeroSupply() (gas: 3429)
+[PASS] test_honor_full() (gas: 4407)
+[PASS] test_honor_reserveCapped() (gas: 4601)
+[PASS] test_honor_zeroFloor() (gas: 4184)
+[PASS] test_ratchet_holds() (gas: 3436)
+[PASS] test_ratchet_up() (gas: 3507)
+[PASS] test_skim_basic() (gas: 3615)
+[PASS] test_skim_zeroBps() (gas: 3576)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 6.62s (8.17s CPU time)
+Ran 4 tests for test/ReserveDrainExploit.t.sol:ReserveDrainRegression
+[PASS] test_contrast_fullFillSellDoesNotDrain() (gas: 9796635)
+[PASS] test_regression_loopDoesNotDrain() (gas: 10251050)
+[PASS] test_regression_singleSwapNoDrain_quote0() (gas: 21310837)
+[PASS] test_regression_singleSwapNoDrain_quote1() (gas: 9828836)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 7.15s (991.87ms CPU time)
+Ran 6 tests for test/invariant/AntifragileInvariants.t.sol:AntifragileInvariants
+[PASS] invariant_floorMonotonic() (runs: 256, calls: 7680, reverts: 0)
+╭--------------------+------------------+-------+---------+----------╮
+| Contract           | Selector         | Calls | Reverts | Discards |
++====================================================================+
+| AntifragileHandler | ownerClaim       | 1206  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | strangerClaim    | 1233  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactInBuy   | 1324  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactInSell  | 1320  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactOutBuy  | 1352  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactOutSell | 1245  | 0       | 0        |
+╰--------------------+------------------+-------+---------+----------╯
+[PASS] invariant_neverPaysMoreThanReserve() (runs: 256, calls: 7680, reverts: 0)
+╭--------------------+------------------+-------+---------+----------╮
+| Contract           | Selector         | Calls | Reverts | Discards |
++====================================================================+
+| AntifragileHandler | ownerClaim       | 1206  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | strangerClaim    | 1233  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactInBuy   | 1324  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactInSell  | 1320  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactOutBuy  | 1352  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactOutSell | 1245  | 0       | 0        |
+╰--------------------+------------------+-------+---------+----------╯
+[PASS] invariant_noStuckHookDelta() (runs: 256, calls: 7680, reverts: 0)
+╭--------------------+------------------+-------+---------+----------╮
+| Contract           | Selector         | Calls | Reverts | Discards |
++====================================================================+
+| AntifragileHandler | ownerClaim       | 1206  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | strangerClaim    | 1233  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactInBuy   | 1324  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactInSell  | 1320  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactOutBuy  | 1352  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactOutSell | 1245  | 0       | 0        |
+╰--------------------+------------------+-------+---------+----------╯
+[PASS] invariant_platformLiabilityClaimable() (runs: 256, calls: 7680, reverts: 0)
+╭--------------------+------------------+-------+---------+----------╮
+| Contract           | Selector         | Calls | Reverts | Discards |
++====================================================================+
+| AntifragileHandler | ownerClaim       | 1206  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | strangerClaim    | 1233  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactInBuy   | 1324  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactInSell  | 1320  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactOutBuy  | 1352  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactOutSell | 1245  | 0       | 0        |
+╰--------------------+------------------+-------+---------+----------╯
+[PASS] invariant_solvency() (runs: 256, calls: 7680, reverts: 0)
+╭--------------------+------------------+-------+---------+----------╮
+| Contract           | Selector         | Calls | Reverts | Discards |
++====================================================================+
+| AntifragileHandler | ownerClaim       | 1206  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | strangerClaim    | 1233  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactInBuy   | 1324  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactInSell  | 1320  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactOutBuy  | 1352  | 0       | 0        |
+|--------------------+------------------+-------+---------+----------|
+| AntifragileHandler | swapExactOutSell | 1245  | 0       | 0        |
+╰--------------------+------------------+-------+---------+----------╯
+[PASS] test_coverage_allActionsExecutable() (gas: 652304)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 7.15s (31.80s CPU time)
+Ran 1 test for test/invariant/AntifragileDrainInvariant.t.sol:AntifragileDrainInvariant
+[PASS] invariant_topUpFairness_noReserveDrain() (runs: 256, calls: 7680, reverts: 0)
+╭--------------+-----------------+-------+---------+----------╮
+| Contract     | Selector        | Calls | Reverts | Discards |
++=============================================================+
+| DrainHandler | partialFillSell | 7680  | 0       | 0        |
+╰--------------+-----------------+-------+---------+----------╯
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 8.51s (8.34s CPU time)
+Ran 2 tests for test/invariant/AntifragileTwoPoolInvariant.t.sol:AntifragileTwoPoolInvariant
+[PASS] invariant_eachPoolSolvent() (runs: 256, calls: 7680, reverts: 0)
+╭----------------+----------+-------+---------+----------╮
+| Contract       | Selector | Calls | Reverts | Discards |
++========================================================+
+| TwoPoolHandler | buyA     | 1862  | 0       | 0        |
+|----------------+----------+-------+---------+----------|
+| TwoPoolHandler | buyB     | 1897  | 0       | 0        |
+|----------------+----------+-------+---------+----------|
+| TwoPoolHandler | sellA    | 1945  | 0       | 0        |
+|----------------+----------+-------+---------+----------|
+| TwoPoolHandler | sellB    | 1976  | 0       | 0        |
+╰----------------+----------+-------+---------+----------╯
+[PASS] invariant_noCrossPoolNetting() (runs: 256, calls: 7680, reverts: 0)
+╭----------------+----------+-------+---------+----------╮
+| Contract       | Selector | Calls | Reverts | Discards |
++========================================================+
+| TwoPoolHandler | buyA     | 1862  | 0       | 0        |
+|----------------+----------+-------+---------+----------|
+| TwoPoolHandler | buyB     | 1897  | 0       | 0        |
+|----------------+----------+-------+---------+----------|
+| TwoPoolHandler | sellA    | 1945  | 0       | 0        |
+|----------------+----------+-------+---------+----------|
+| TwoPoolHandler | sellB    | 1976  | 0       | 0        |
+╰----------------+----------+-------+---------+----------╯
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 9.55s (16.42s CPU time)
+Ran 13 tests for test/ProgrammableFee.t.sol:ProgrammableFeeTest
+[PASS] testFuzz_feeSplit(uint16,uint96) (runs: 48, μ: 47399984, ~: 34889142)
+[PASS] test_01_rateLevels_platformAlways10bps() (gas: 172897970)
+[PASS] test_02_nonAdditive_3pct() (gas: 39206896)
+[PASS] test_03_quadrants_quote0() (gas: 42845030)
+[PASS] test_03_quadrants_quote1() (gas: 39502928)
+[PASS] test_04_basisIsExecutedNotRequested() (gas: 42537751)
+[PASS] test_05_onlyCanonicalPoolAccrues() (gas: 42908304)
+[PASS] test_06_hookEntrypointsAreOnlyPoolManager() (gas: 42084322)
+[PASS] test_07_ownerClaimsToArbitraryDestinations() (gas: 42715388)
+[PASS] test_08_nonOwnerCannotClaim() (gas: 42559646)
+[PASS] test_09_noStoredRecipient_ownerOnlyRedirect() (gas: 42578077)
+[PASS] test_10_solvencyAndNoCrossPoolNetting() (gas: 137969447)
+[PASS] test_11_eventsReconcile() (gas: 39241521)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 26.04s (36.08s CPU time)
+Ran 10 test suites in 26.05s (68.79s CPU time): 70 tests passed, 0 failed, 0 skipped (70 total tests)

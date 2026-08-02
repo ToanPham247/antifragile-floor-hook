@@ -836,7 +836,7 @@
         "name": "Uniswap v4 PoolManager",
         "kind": "protocol-singleton",
         "repository": "https://github.com/Uniswap/v4-core",
-        "revision": null,
+        "revision": "af7c077a438d5556b75f0ca722c6d3d53a7a1a9b",
         "packageVersion": "1.0.2",
         "license": "MIT",
         "sourceProvenance": "pinned-source",

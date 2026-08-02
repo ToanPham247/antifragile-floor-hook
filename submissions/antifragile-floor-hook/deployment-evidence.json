@@ -17,7 +17,7 @@
   "observedBlock": 25666892,
   "rpcClass": "public-node",
   "sourceRepository": "https://github.com/Uniswap/v4-core",
-  "sourceRevision": null,
+  "sourceRevision": "af7c077a438d5556b75f0ca722c6d3d53a7a1a9b",
   "sourceStatus": "matched",
   "verificationProvider": "sourcify",
   "compiler": "0.8.26+commit.8a97fa7a",
@@ -46,7 +46,7 @@
     "fullyQualifiedName": "lib/v4-core/src/PoolManager.sol:PoolManager",
     "note": "Sourcify independently attests both a runtime-bytecode match and a creation-bytecode match for this address against Uniswap v4-core PoolManager source. Etherscan was not used because a keyless request returned NOTOK; Sourcify is a keyless, independent verification provider."
   },
-  "sourceIdentityNote": "sourceRepository is the Uniswap v4-core repository. sourceRevision is left null because the exact upstream Git commit for the deployed runtime is not resolved by the pinned official feed (deployment-snapshot feedSourceRef 'v4-core@1.0.0' has sourceRefResolution=unresolved); the hook itself compiles against the npm-pinned @uniswap/v4-core@1.0.2 (packageVersion + integrity in compatibility.lock.json). The deployed mainnet runtime identity is bound here by (a) the observed runtime codehash and (b) Sourcify's runtime+creation source match.",
+  "sourceIdentityNote": "sourceRepository is the Uniswap v4-core repository. sourceRevision is resolved from npm view @uniswap/v4-core@1.0.0 gitHead (the deployed runtime matches the v4-core 1.0.0 release, not the 1.0.2 npm build the hook compiles against). The pinned official feed (deployment-snapshot feedSourceRef 'v4-core@1.0.0') does not independently resolve the git commit, so this npm-resolved revision is builder-declared evidence. The hook itself compiles against @uniswap/v4-core@1.0.2 (packageVersion + integrity in compatibility.lock.json). The deployed mainnet runtime identity is bound here by (a) the observed runtime codehash, (b) the npm-resolved gitHead, and (c) Sourcify's runtime+creation source match.",
   "packageVersion": "1.0.2",
   "generatedBy": "resolve-deployment.mjs --id v4-poolmanager-ethereum (programmable-v4-hook-builder skill) + live cast codehash/block observation + Sourcify v2 source-verification lookup"
 }

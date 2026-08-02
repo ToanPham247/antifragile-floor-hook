@@ -1859,8 +1859,8 @@
     {
       "path": "test/invariant/AntifragileInvariants.t.sol",
       "kind": "test-entry",
-      "bytes": 15611,
-      "sha256": "ae7f43284e9cbbc669bc40a147f5ac5f1486c060cd2ca09fa89b2859a472191f"
+      "bytes": 15279,
+      "sha256": "e8ff858e6bf2e1d8e05f7f6be51d2f5ecd28db3c13e387ba5ac1276db25513f0"
     },
     {
       "path": "test/invariant/AntifragileTwoPoolInvariant.t.sol",
@@ -6218,5 +6218,5 @@
     }
   ],
   "javascriptImportResolutions": [],
-  "reviewTargetHash": "sha256:99b25700678f44226f466580bee0360d79bcef1b7d9266a58a1c540b2932451f"
+  "reviewTargetHash": "sha256:594e3e66ea01ed58334302ff662f70b7eb9363d68bcec72db3e7e35deabc1f63"
 }

@@ -3,6 +3,9 @@ pragma solidity 0.8.26;
 
 import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
 import {CurrencySettler} from "@openzeppelin/uniswap-hooks/src/utils/CurrencySettler.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+import {FloorMath} from "./lib/FloorMath.sol";
 
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
@@ -17,10 +20,25 @@ import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 /**
  * @title AntifragileFloorHook
- * @notice Uniswap v4 hook implementing the mandatory Programmable volume-fee policy
- *         `programmable-volume-fee-v1` for the Antifragile Floor.
+ * @notice Uniswap v4 hook implementing (a) the mandatory Programmable volume-fee policy
+ *         `programmable-volume-fee-v1` and (b) a self-funded, monotonic price FLOOR that sellers can
+ *         always redeem against, for the Antifragile Floor.
  *
- * @dev POLICY SUMMARY (see docs/ for the full spec):
+ * @dev FLOOR SUMMARY ("top-up to floor" — Design A, decoupled from the fee; see docs/FLOOR.md):
+ *
+ *      The project slice of the fee accrues into `reserveQuote`. The floor price is
+ *      `floorPrice(reserveQuote, backedSupply)` (QUOTE-per-TKN, WAD), where `backedSupply` is the TKN's
+ *      circulating `totalSupply()`. `floorHigh` is a MONOTONIC high-water mark of that price. On an
+ *      EXACT-INPUT SELL (TKN in, QUOTE out) the AMM executes the WHOLE swap first (the core AMM leg is
+ *      never zero — this is NOT a custom curve); then {_afterSwap} subsidises the seller from the
+ *      reserve up to the floor: `topUp = min(max(floorHigh*tknIn/1e18 - ammQuoteOut, 0), reserveQuote)`.
+ *      The seller receives `ammQuoteOut - fee + topUp`. The top-up is a RESERVE-FUNDED SUBSIDY, not swap
+ *      volume: the fee is still charged ONLY on the executed `ammQuoteOut`. When the reserve cannot
+ *      reach the floor the sell is PARTIALLY honored (whole reserve paid, `reserveQuote -> 0`), never
+ *      reverted. Buys, exact-output sells, and a zero floor/reserve get no top-up. The floor NEVER pays
+ *      more QUOTE than the reserve holds, so the hook is solvent by construction (see {_afterSwap}).
+ *
+ *      POLICY SUMMARY (see docs/ for the full spec):
  *
  *      RATES are in hundredths-of-a-bip: `1000 = 10 bps = 0.10%`.
  *        - `selected`  = total hook-owned swap charge = `feeTotalBps * 100`.
@@ -113,7 +131,16 @@ contract AntifragileFloorHook is BaseHook {
     mapping(PoolId => mapping(Currency => uint256)) public programmableFeeOwed;
 
     /// @notice The floor reserve: accumulated project portion (effective-1000), as quote ERC-6909 claims.
+    ///         Also the sole funding source for floor top-ups (see {_afterSwap}). Every unit of
+    ///         `reserveQuote` is backed 1:1 by this hook's ERC-6909 quote-claim balance.
     uint256 public reserveQuote;
+
+    /// @notice Monotonic (never-decreasing) floor price high-water mark, QUOTE-per-TKN, WAD-scaled.
+    /// @dev After every swap `floorHigh = max(floorHigh, floorPrice(reserveQuote, backedSupply))`.
+    ///      It is the ENFORCED top-up target; the actual payout is ALWAYS additionally capped by the
+    ///      available `reserveQuote` (the floor never promises more QUOTE than the reserve holds).
+    ///      `backedSupply` is the TKN's circulating supply = `IERC20(tknCurrency).totalSupply()`.
+    uint256 public floorHigh;
 
     /* ------------------------------------------------------------------ */
     /*                              Events                                 */
@@ -127,6 +154,18 @@ contract AntifragileFloorHook is BaseHook {
     /// @notice Emitted when the owner claims the platform liability to a chosen destination.
     event ProgrammableFeeClaimed(
         PoolId indexed poolId, Currency indexed currency, address indexed destination, uint256 amount
+    );
+
+    /// @notice Emitted when the monotonic floor high-water mark increases.
+    event FloorRatcheted(PoolId indexed poolId, uint256 floorHigh);
+
+    /// @notice Emitted when an exact-input sell is topped up from the reserve toward the floor.
+    /// @param swapper The swap initiator forwarded by the PoolManager (typically a router, not the EOA).
+    /// @param tknIn The TKN amount offered by the sell (`|amountSpecified|`).
+    /// @param topUp The QUOTE paid to the seller from `reserveQuote` on top of the AMM output.
+    /// @param floorHigh The enforced floor target at the time of the top-up.
+    event FloorToppedUp(
+        PoolId indexed poolId, address indexed swapper, uint256 tknIn, uint256 topUp, uint256 floorHigh
     );
 
     /* ------------------------------------------------------------------ */
@@ -233,29 +272,109 @@ contract AntifragileFloorHook is BaseHook {
     }
 
     /**
-     * @dev AFTER-quadrant collection: when the quote currency is the swap's UNSPECIFIED currency, its
-     *      executed amount is only known post-swap. We read the ACTUAL executed quote amount from the
-     *      swap `BalanceDelta`, mint the total charge as quote ERC-6909 claims, and return it as a
-     *      positive `afterSwap` delta on the unspecified (quote) currency. BEFORE-quadrant swaps were
-     *      already collected in {_beforeSwap} and are a no-op here.
+     * @dev AFTER-quadrant fee collection PLUS the self-funded floor top-up (Design A — decoupled from
+     *      the fee, no custom curve).
+     *
+     *      1. FEE (unchanged): when the quote currency is the swap's UNSPECIFIED currency its executed
+     *         amount is only known post-swap. We read the ACTUAL executed quote from the swap
+     *         `BalanceDelta`, mint the total charge as quote ERC-6909 claims, and hold it as a positive
+     *         `afterSwap` delta (`feeDelta`) on the unspecified (quote) currency. BEFORE-quadrant swaps
+     *         were already collected in {_beforeSwap} (`feeDelta == 0` here). The fee basis is ALWAYS the
+     *         executed quote volume — the top-up below never changes it.
+     *
+     *      2. RATCHET (every swap): `floorHigh = max(floorHigh, floorPrice(reserveQuote, backedSupply))`.
+     *
+     *      3. TOP-UP (exact-input SELL only — TKN in, QUOTE out, `amountSpecified < 0`, quote unspecified):
+     *         the AMM already executed the WHOLE swap (`ammQuoteOut` = the executed quote output), so the
+     *         core AMM leg is never zero. We then subsidise the seller from `reserveQuote` up to the
+     *         floor: `targetGross = floorHigh * tknIn / 1e18`,
+     *         `topUp = ammQuoteOut >= targetGross ? 0 : min(targetGross - ammQuoteOut, reserveQuote)`.
+     *         The top-up is a RESERVE-FUNDED SUBSIDY, not swap volume — it is NOT part of the fee basis.
+     *         It is paid by burning `topUp` of the hook's quote ERC-6909 claims (`reserveQuote -= topUp`)
+     *         and returning it as a NEGATIVE afterSwap delta, netted with the fee:
+     *         `net = feeDelta - topUp`. The seller therefore receives `ammQuoteOut - fee + topUp`.
+     *
+     *      SOLVENCY (hard invariant): `topUp <= reserveQuote <= (quote ERC-6909 balance)`, and the fee
+     *      mint (`+total`) minus the top-up burn (`-topUp`) exactly matches the change in
+     *      `reserveQuote + Σ programmableFeeOwed`, so the hook's realized ERC-6909 quote-claim balance
+     *      always equals `reserveQuote + platform liabilities`. The hook can never pay out more than it
+     *      holds; a reserve too small to reach the floor is PARTIALLY honored (seller gets the whole
+     *      reserve, `reserveQuote -> 0`), never reverted.
      */
-    function _afterSwap(address, PoolKey calldata key, SwapParams calldata params, BalanceDelta delta, bytes calldata)
-        internal
-        override
-        returns (bytes4, int128)
-    {
-        bool specifiedTokenIs0 = (params.amountSpecified < 0) == params.zeroForOne;
-        bool isQuote0 = key.currency0 == quoteCurrency;
-        bool quoteIsSpecified = isQuote0 == specifiedTokenIs0;
-        if (quoteIsSpecified) {
-            return (IHooks.afterSwap.selector, int128(0)); // already collected in _beforeSwap
+    function _afterSwap(
+        address sender,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata
+    ) internal override returns (bytes4, int128) {
+        // Quote is the UNSPECIFIED (after-quadrant) currency iff isQuote0 != specifiedTokenIs0.
+        // Scoped so the intermediate booleans don't stay live across the rest of the frame.
+        bool quoteIsUnspecified;
+        {
+            bool specifiedTokenIs0 = (params.amountSpecified < 0) == params.zeroForOne;
+            quoteIsUnspecified = (key.currency0 == quoteCurrency) != specifiedTokenIs0;
         }
 
-        int128 quoteDelta = isQuote0 ? delta.amount0() : delta.amount1();
-        uint256 grossQuote = quoteDelta < 0 ? uint256(int256(-quoteDelta)) : uint256(int256(quoteDelta));
-        uint256 total = _collect(key.toId(), grossQuote);
+        // ---- 1. Fee (after-quadrant only; before-quadrant already collected in _beforeSwap) ----
+        int128 feeDelta = 0;
+        uint256 ammQuoteOut = 0;
+        if (quoteIsUnspecified) {
+            int128 quoteDelta = (key.currency0 == quoteCurrency) ? delta.amount0() : delta.amount1();
+            uint256 grossQuote = quoteDelta < 0 ? uint256(int256(-quoteDelta)) : uint256(int256(quoteDelta));
+            feeDelta = _collect(poolId, grossQuote).toInt128();
+            // For a SELL the quote is produced (positive delta) => that positive amount is ammQuoteOut.
+            ammQuoteOut = quoteDelta > 0 ? uint256(int256(quoteDelta)) : 0;
+        }
 
-        return (IHooks.afterSwap.selector, total.toInt128());
+        // ---- 2. Ratchet the monotonic floor from the (post-fee) reserve ----
+        uint256 floorNow = FloorMath.ratchet(floorHigh, FloorMath.floorPrice(reserveQuote, _backedSupply()));
+        if (floorNow != floorHigh) {
+            floorHigh = floorNow;
+            emit FloorRatcheted(poolId, floorNow);
+        }
+
+        // ---- 3. Top-up: exact-input SELL only (TKN in, QUOTE out, amountSpecified < 0) ----
+        uint256 topUp = 0;
+        if (quoteIsUnspecified && params.amountSpecified < 0) {
+            topUp = _topUpToFloor(sender, uint256(-params.amountSpecified), ammQuoteOut, floorNow);
+        }
+
+        // Net unspecified-quote delta: fee is taken (+), top-up is paid out (-).
+        return (IHooks.afterSwap.selector, feeDelta - topUp.toInt128());
+    }
+
+    /**
+     * @dev Pays the seller a reserve-funded subsidy up to the floor, capped by `reserveQuote` (partial
+     *      honor). Burns `topUp` quote ERC-6909 claims so the returned negative net delta reaches the
+     *      seller; `topUp <= reserveQuote <= balance` keeps the burn covered and the hook solvent.
+     *      Split out of {_afterSwap} to keep that frame within the EVM's 16-slot stack limit.
+     */
+    function _topUpToFloor(address sender, uint256 tknIn, uint256 ammQuoteOut, uint256 floorNow)
+        internal
+        returns (uint256 topUp)
+    {
+        if (floorNow == 0) return 0;
+        uint256 reserve = reserveQuote;
+        if (reserve == 0) return 0;
+
+        uint256 targetGross = (floorNow * tknIn) / 1e18; // floorHigh is WAD-scaled QUOTE-per-TKN
+        if (ammQuoteOut >= targetGross) return 0;
+
+        uint256 deficit = targetGross - ammQuoteOut;
+        topUp = deficit < reserve ? deficit : reserve; // partial honor: never more than the reserve
+        reserveQuote = reserve - topUp;
+        quoteCurrency.settle(poolManager, address(this), topUp, true); // burn claims -> +topUp hook delta
+        emit FloorToppedUp(poolId, sender, tknIn, topUp, floorNow);
+    }
+
+    /**
+     * @dev The TKN circulating supply that backs the floor. We use the ERC20 `totalSupply()` of the
+     *      token side (documented choice: circulating == totalSupply for a token with no separate
+     *      escrow). A larger backed supply spreads the same reserve across more tokens => a lower floor.
+     */
+    function _backedSupply() internal view returns (uint256) {
+        return IERC20(Currency.unwrap(tknCurrency)).totalSupply();
     }
 
     /**

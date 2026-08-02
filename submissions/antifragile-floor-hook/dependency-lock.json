@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "baseline": "model-specific-pinned",
+  "compiler": {
+    "solidity": "0.8.26",
+    "sourceRepository": "https://github.com/argotorg/solidity.git",
+    "sourceRevision": "8a97fa7a1db1ec509221ead6fea6802c684ee887",
+    "sourceTree": "4ecc702563263869217d8a42262d09bd6015f597",
+    "evmVersion": "cancun",
+    "optimizer": true,
+    "optimizerRuns": 200,
+    "viaIR": false,
+    "metadataBytecodeHash": "none",
+    "cborMetadata": true,
+    "ffi": false
+  },
+  "dependencies": [
+    {
+      "name": "OpenZeppelin Uniswap Hooks",
+      "repository": "https://github.com/OpenZeppelin/uniswap-hooks",
+      "revision": "a5f831963087d44a857ec41ddff4da01949f38ff",
+      "packageVersion": "1.1.1",
+      "integrity": "sha512-DI5lNlNsWCcSbEGdc2SCmxpkAAjlnwf4a1MQcpPEO6kRi1OQUZwYwGG/n379wJdrcj5n0/z7uhZ/wWetG92lrQ==",
+      "sourceTree": "01e2c8fe030e7c6dada3f620ed9e8ef1ef7771e2",
+      "license": "MIT",
+      "importPrefixes": ["@openzeppelin/uniswap-hooks/"]
+    },
+    {
+      "name": "OpenZeppelin Contracts",
+      "repository": "https://github.com/OpenZeppelin/openzeppelin-contracts",
+      "revision": null,
+      "packageVersion": "5.5.0",
+      "integrity": "sha512-R8hq4zmKKWP2c7OxeRgAcjZwvF5W0Qq2OIX7degrtdM52Q9xYr4MLJdUAVPKGUewNJ1qo+M6YiZLLnNUnjP/gg==",
+      "sourceTree": null,
+      "license": "MIT",
+      "importPrefixes": ["@openzeppelin/contracts/"]
+    },
+    {
+      "name": "Uniswap v4 Core",
+      "repository": "https://github.com/Uniswap/v4-core",
+      "revision": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc",
+      "packageVersion": "1.0.2",
+      "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg==",
+      "sourceTree": "eb2b71f69fae17a743bcdddd54b5fe941236d949",
+      "license": "MIT",
+      "importPrefixes": ["@uniswap/v4-core/"]
+    },
+    {
+      "name": "Uniswap v4 Periphery",
+      "repository": "https://github.com/Uniswap/v4-periphery",
+      "revision": "ad04c9f24a170accf5ea1b2836bbafd514537ca6",
+      "packageVersion": "1.0.3",
+      "integrity": "sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg==",
+      "sourceTree": "be7e2efe29a6d352ed97c5bd9bf02a0c84decf6b",
+      "license": "MIT",
+      "importPrefixes": ["@uniswap/v4-periphery/"]
+    },
+    {
+      "name": "Forge Standard Library",
+      "repository": "https://github.com/foundry-rs/forge-std",
+      "revision": "3b20d60d14b343ee4f908cb8079495c07f5e8981",
+      "packageVersion": "1.0.2",
+      "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg==",
+      "sourceTree": "12dc77680520b52f871a992281dd8d817e46c4bf",
+      "license": "Apache-2.0",
+      "importPrefixes": ["forge-std/"]
+    },
+    {
+      "name": "Solmate",
+      "repository": "https://github.com/transmissions11/solmate",
+      "revision": "bfc9c25865a278ae1194b0c1793e3c3a38a0b1e6",
+      "packageVersion": "1.0.2",
+      "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg==",
+      "sourceTree": "12dc77680520b52f871a992281dd8d817e46c4bf",
+      "license": "AGPL-3.0",
+      "importPrefixes": ["solmate/"]
+    }
+  ]
+}

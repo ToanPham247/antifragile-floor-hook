@@ -48,7 +48,7 @@
     "network": "ethereum",
     "solidityVersion": "0.8.26",
     "evmVersion": "cancun",
-    "dependencyBaseline": "programmable-tested",
+    "dependencyBaseline": "model-specific-pinned",
     "officialLaunchProfileId": null
   },
   "assets": [
@@ -819,6 +819,14 @@
       "mutable": false,
       "delay": null,
       "userExitImpact": "The floor can never be lowered, so an existing redemption right cannot be revoked."
+    },
+    {
+      "role": "Test-only public mint (MockToken ERC-20 mock)",
+      "controller": "test/audit/TokenModel.t.sol (test file only)",
+      "capabilities": ["Test-only public mint on MockToken in test/audit/TokenModel.t.sol; the launched FLOOR token has no mint capability."],
+      "mutable": true,
+      "delay": null,
+      "userExitImpact": "This mock exists only in the test suite and cannot affect any deployed pool or user."
     }
   ],
   "dependencies": {
@@ -836,7 +844,7 @@
         "chainAddress": "0x000000000004444c5dc75cB358380D2e3dE08A90",
         "runtimeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
         "deploymentEvidencePath": "submissions/antifragile-floor-hook/deployment-evidence.json",
-        "trust": "Immutable Ethereum-mainnet v4 PoolManager (address from deployment record v4-poolmanager-ethereum). The hook compiles against @uniswap/v4-core 1.0.2 per compatibility.lock.json. The deployed mainnet runtime is now BOUND: runtimeHash observed live (cast codehash at block 25666892 and head) plus a Sourcify runtime+creation source match (deployment-evidence.json), validated by the test/fork/* pinned+head suite. Contributor-declared, untrusted until maintainers reproduce; the hook is not deployed.",
+        "trust": "Immutable Ethereum-mainnet v4 PoolManager (address from deployment record v4-poolmanager-ethereum). The hook compiles against @uniswap/v4-core 1.0.2 per compatibility.lock.json. The mainnet PoolManager runtime is observed: runtimeHash from cast codehash at block 25666892 and head, plus a Sourcify runtime+creation source match (deployment-evidence.json), validated by the test/fork/* pinned+head suite. Contributor-declared, untrusted until maintainers reproduce; the hook is not deployed.",
         "failure": "A missing or mismatched PoolManager runtime blocks preparation; at runtime every callback is onlyPoolManager and any PoolManager revert reverts the whole swap atomically.",
         "fallback": "No silent fallback: the bound runtime hash and the Sourcify runtime+source match are reproducible from deployment-evidence.json; maintainers must independently reproduce them before release."
       }
@@ -1262,7 +1270,7 @@
     "compilerBuildInfoPaths": ["out/build-info/6fbe8915ea68f23f.json"],
     "specificationPath": "docs/PROGRAMMABLE_FEE.md",
     "testEvidencePath": ".gas-snapshot",
-    "dependencyLockPath": "compatibility.lock.json",
+    "dependencyLockPath": "submissions/antifragile-floor-hook/dependency-lock.json",
     "gateStatusPath": "submissions/antifragile-floor-hook/gate-status.json",
     "reviewTargetPath": "submissions/antifragile-floor-hook/review-target.json",
     "runtimeAssetManifestPath": null
@@ -1295,7 +1303,7 @@
     "featureTriggers": ["custom-accounting", "custom-math", "external-calls", "external-liquidity", "hook-held-liquidity", "price-impact", "project-custody", "project-external-calls", "project-value-flow", "return-delta"]
   },
   "disclosures": [
-    "This is a PROTOTYPE record bound to the implemented hook (src/AntifragileFloorHook.sol + src/lib/FloorMath.sol) at git commit cd2109a, with a green Foundry suite. It is NOT deployed, independently reviewed, audited, routed or available through Programmable; local tests prove only the declared rules for this revision.",
+    "This is a PROTOTYPE record bound to the implemented hook (src/AntifragileFloorHook.sol + src/lib/FloorMath.sol). The hook is NOT deployed; it has not been independently reviewed, audited, routed, source-verified, or made available through Programmable. Local tests prove only the declared rules for this revision.",
     "The floor mechanism is an afterSwap RESERVE-FUNDED TOP-UP, not a beforeSwap redemption and not a custom curve: the core AMM executes the FULL swap first (the AMM leg is always the full swap, never zero), and only then does the hook subsidise an exact-input seller from the reserve toward the monotonic floorHigh. This supersedes the earlier proposal-stage 'below-floor redemption with token sink' design, which was NOT shipped. There is no token sink; a seller's whole token amount reaches the AMM.",
     "The top-up is sized on the EXECUTED tkn the pool actually received (read from the swap BalanceDelta), never the requested |amountSpecified|. This closes a CRITICAL reserve-drain a price-limited partial fill would otherwise cause (fixed at commit cd2109a; regression test test/ReserveDrainExploit.t.sol).",
     "FAIRNESS INVARIANT: the mandatory fee is charged only on the executed AMM quote volume (ammQuoteOut), never on the subsidised gross; the top-up is a pure seller subsidy and never inflates the fee basis (proven by test_10_feeBasisUnchangedByTopUp).",
@@ -1304,7 +1312,7 @@
     "The reserve and the platform liability are held transparently as the hook's ERC-6909 quote (WETH) claims in PoolManager; no admin, builder or project role can withdraw, sweep or redirect either, and no party can lower the floor. Only the immutable owner can claim the platform liability (claimProgrammableFee), to an owner-selected destination per claim.",
     "There is no oracle, keeper, upgrade path or admin control; floorHigh is computed only from internal state: floorHigh = max(floorHigh, reserveQuote * 1e18 / totalSupply(tkn)). backedSupply uses the tkn's full totalSupply() (the conservative choice, yielding the lowest/safest floor). The launched token is a standard fixed-supply ERC-20 with no mint, freeze, blacklist or confiscation authority.",
     "v1 tops up EXACT-INPUT sells only (the panic-dump case); exact-output sells and all buys pay the fee and trade at the AMM, with the floor bounding price via arbitrage. Collection is quadrant-dependent (collect BEFORE iff the quote is the swap's specified currency, else AFTER); for the canonical WETH=currency0 quote pool the paths are before/after/after/before.",
-    "The hook is deployed at a mined CREATE2 address whose low bits equal the permission mask 0x10cc (afterInitialize | beforeSwap | afterSwap | beforeSwapReturnDelta | afterSwapReturnDelta); the exact deployed hook address, the mined CREATE2 salt, the mainnet PoolManager runtime hash and the canonical PoolId are not yet pinned (the hook is not deployed and the suite runs against a locally-deployed fresh PoolManager, not the mainnet singleton), and remain maintainer-owned handoff work.",
+    "The hook is targetable at a mined CREATE2 address whose low bits equal the permission mask 0x10cc (afterInitialize | beforeSwap | afterSwap | beforeSwapReturnDelta | afterSwapReturnDelta); the exact hook address, the mined CREATE2 salt, the mainnet PoolManager runtime hash and the canonical PoolId are not yet pinned (the hook is not deployed and the suite runs against a locally-deployed fresh PoolManager, not the mainnet singleton), and remain maintainer-owned handoff work.",
     "No off-chain product surface (UI/API/indexer) is implemented; data reconstruction is proven on-chain by the solvency/invariant suite, but a productionized indexer remains future maintainer-owned handoff work.",
     "docs/FLOOR.md section 3 example text uses tknIn = |amountSpecified| for illustration; the shipped code sizes the top-up on the EXECUTED tkn input (execTknIn) per the security fix at commit cd2109a — the doc prose should be reconciled to the implementation."
   ],

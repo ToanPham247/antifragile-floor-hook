@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "standardVersion": "1.3.0",
-  "submissionHash": "sha256:b34e30b6979fdcedc41ac15408c125ed886fe7c080f322645dace30c83e69194",
+  "submissionHash": "sha256:d66f3a2b89664ff1cb903b2ca01b117cf79d1aa9995958f4933f9d378da73808",
   "closureMethod": "declared-bytes-and-resolved-solidity-and-javascript-imports-v10",
   "closure": {
     "status": "complete",
@@ -1751,8 +1751,14 @@
     {
       "path": "submissions/antifragile-floor-hook/compatibility-report.json",
       "kind": "package:compatibility-report.json",
-      "bytes": 14354,
-      "sha256": "79c27885620b9ec7c5bd297994cb0f738d29cddefabfb73ac06d309d0b7431d3"
+      "bytes": 14986,
+      "sha256": "82bcfabed2871a88de0d553fe42eb2554e089bfa831ce41e9bea18b39940efea"
+    },
+    {
+      "path": "submissions/antifragile-floor-hook/dependency-lock.json",
+      "kind": "dependency-lock",
+      "bytes": 3227,
+      "sha256": "5032bf75ff9c6e77061fb8728f66afa033c87bd6fe57bed402915636b8361e1a"
     },
     {
       "path": "submissions/antifragile-floor-hook/deployment-evidence.json",
@@ -1763,8 +1769,8 @@
     {
       "path": "submissions/antifragile-floor-hook/submission.json",
       "kind": "package:submission.json",
-      "bytes": 90638,
-      "sha256": "41a9ec1e0a8d1df39f1c6f7105ae3e7d1a86215d669bf44fb274da2bfc677a98"
+      "bytes": 91094,
+      "sha256": "3f859318ef12d2f8f45017f940d617067c189432ffdd6fa8f9a2478be18ddf8f"
     },
     {
       "path": "test/AntifragileFloorHook.t.sol",
@@ -6218,5 +6224,5 @@
     }
   ],
   "javascriptImportResolutions": [],
-  "reviewTargetHash": "sha256:594e3e66ea01ed58334302ff662f70b7eb9363d68bcec72db3e7e35deabc1f63"
+  "reviewTargetHash": "sha256:f969780a70fc354b09133bda4d3d7ead134797d49e37af082d4f58e4e0af3b21"
 }

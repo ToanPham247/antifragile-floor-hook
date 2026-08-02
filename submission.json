@@ -238,7 +238,7 @@
     },
     "evidence": {
       "sourcePaths": ["src/AntifragileFloorHook.sol", "src/lib/FloorMath.sol"],
-      "testPaths": ["test/ProgrammableFee.t.sol", "test/FloorHonor.t.sol", "test/AntifragileFloorHook.t.sol"]
+      "testPaths": ["test/ProgrammableFee.t.sol", "test/FloorHonor.t.sol", "test/AntifragileFloorHook.t.sol", "test/audit/FeeBypassAndAccounting.t.sol", "test/audit/OwnerReserveIsolation.t.sol", "test/invariant/AntifragileInvariants.t.sol", "test/invariant/AntifragileTwoPoolInvariant.t.sol", "test/fork/AntifragileFork.t.sol"]
     }
   },
   "hook": {
@@ -834,11 +834,11 @@
         "sourceProvenance": "pinned-source",
         "deploymentRecordId": "v4-poolmanager-ethereum",
         "chainAddress": "0x000000000004444c5dc75cB358380D2e3dE08A90",
-        "runtimeHash": null,
-        "deploymentEvidencePath": null,
-        "trust": "The immutable Ethereum-mainnet v4 PoolManager (address from the committed deployment record v4-poolmanager-ethereum). The hook compiles against @uniswap/v4-core 1.0.2 (Hooks/PoolKey/BalanceDelta types) per compatibility.lock.json. NOT YET runtime-verified: the deployed runtime bytecode hash and an independent runtime+source observation are not bound because the hook is not deployed and its suite runs against a locally-deployed fresh PoolManager (Deployers.sol), not the mainnet singleton.",
+        "runtimeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+        "deploymentEvidencePath": "deployment-evidence.json",
+        "trust": "Immutable Ethereum-mainnet v4 PoolManager (address from deployment record v4-poolmanager-ethereum). The hook compiles against @uniswap/v4-core 1.0.2 per compatibility.lock.json. The deployed mainnet runtime is now BOUND: runtimeHash observed live (cast codehash at block 25666892 and head) plus a Sourcify runtime+creation source match (deployment-evidence.json), validated by the test/fork/* pinned+head suite. Contributor-declared, untrusted until maintainers reproduce; the hook is not deployed.",
         "failure": "A missing or mismatched PoolManager runtime blocks preparation; at runtime every callback is onlyPoolManager and any PoolManager revert reverts the whole swap atomically.",
-        "fallback": "No silent fallback; bind the exact mainnet runtime hash and a reproducible runtime+source observation before release, and let maintainers independently reproduce it."
+        "fallback": "No silent fallback: the bound runtime hash and the Sourcify runtime+source match are reproducible from deployment-evidence.json; maintainers must independently reproduce them before release."
       }
     ],
     "offchain": []
@@ -986,7 +986,7 @@
       "maintainerReviewRequired": true,
       "selfApproval": false,
       "availabilityClaimed": false,
-      "handoffNotes": "The single custom hook is implemented (src/AntifragileFloorHook.sol + src/lib/FloorMath.sol, 70 tests green) and is the review target: the quadrant-dependent mandatory fee, the owner-only claimable liability, and the monotonic reserve-funded floor top-up. No product UI, API or indexer surface is implemented yet; those, and any deployment, remain future maintainer-owned handoff work requiring separate review."
+      "handoffNotes": "The single custom hook is implemented (src/AntifragileFloorHook.sol + src/lib/FloorMath.sol, 88 tests green incl. the test/audit/* adversarial suite and the mainnet-fork suite) and is the review target: the quadrant-dependent mandatory fee, the owner-only claimable liability, the monotonic reserve-funded floor top-up, and the immutable backed-supply snapshot (audit finding 1.2). No product UI, API or indexer surface is implemented yet; those, and any deployment, remain future maintainer-owned handoff work requiring separate review."
     }
   },
   "projectSurfaces": [
@@ -1001,9 +1001,9 @@
       "valueFlowRefs": ["swap-volume-charge", "programmable-fee-accrual", "reserve-skim", "floor-topup", "programmable-fee-claim"],
       "assetRefs": ["weth", "floor-token"],
       "sourcePaths": ["src/AntifragileFloorHook.sol", "src/lib/FloorMath.sol"],
-      "testPaths": ["test/ProgrammableFee.t.sol", "test/FloorHonor.t.sol", "test/FloorMath.t.sol", "test/AntifragileFloorHook.t.sol", "test/Reentrancy.t.sol", "test/HardValues.t.sol", "test/ReserveDrainExploit.t.sol", "test/invariant/AntifragileInvariants.t.sol", "test/invariant/AntifragileDrainInvariant.t.sol", "test/invariant/AntifragileTwoPoolInvariant.t.sol"],
+      "testPaths": ["test/ProgrammableFee.t.sol", "test/FloorHonor.t.sol", "test/FloorMath.t.sol", "test/AntifragileFloorHook.t.sol", "test/Reentrancy.t.sol", "test/HardValues.t.sol", "test/ReserveDrainExploit.t.sol", "test/invariant/AntifragileInvariants.t.sol", "test/invariant/AntifragileDrainInvariant.t.sol", "test/invariant/AntifragileTwoPoolInvariant.t.sol", "test/audit/AuditBase.sol", "test/audit/TokenModel.t.sol", "test/audit/BindingFrontrun.t.sol", "test/audit/ReentrancyDeeper.t.sol", "test/audit/OwnerReserveIsolation.t.sol", "test/audit/FeeBypassAndAccounting.t.sol", "test/fork/AntifragileFork.t.sol"],
       "schemaPaths": [],
-      "evidencePaths": ["docs/FLOOR.md", "docs/PROGRAMMABLE_FEE.md", "compatibility.lock.json"],
+      "evidencePaths": ["docs/FLOOR.md", "docs/PROGRAMMABLE_FEE.md", "docs/AUDIT.md", "compatibility.lock.json"],
       "exposure": {
         "movesValue": true,
         "usesSignatures": false,
@@ -1250,14 +1250,21 @@
       "test/ReserveDrainExploit.t.sol",
       "test/invariant/AntifragileInvariants.t.sol",
       "test/invariant/AntifragileDrainInvariant.t.sol",
-      "test/invariant/AntifragileTwoPoolInvariant.t.sol"
+      "test/invariant/AntifragileTwoPoolInvariant.t.sol",
+      "test/audit/AuditBase.sol",
+      "test/audit/TokenModel.t.sol",
+      "test/audit/BindingFrontrun.t.sol",
+      "test/audit/ReentrancyDeeper.t.sol",
+      "test/audit/OwnerReserveIsolation.t.sol",
+      "test/audit/FeeBypassAndAccounting.t.sol",
+      "test/fork/AntifragileFork.t.sol"
     ],
-    "compilerBuildInfoPaths": ["out/build-info/b72754b987f1dfb2.json"],
+    "compilerBuildInfoPaths": ["out/build-info/6fbe8915ea68f23f.json"],
     "specificationPath": "docs/PROGRAMMABLE_FEE.md",
     "testEvidencePath": ".gas-snapshot",
     "dependencyLockPath": "compatibility.lock.json",
-    "gateStatusPath": null,
-    "reviewTargetPath": null,
+    "gateStatusPath": "gate-status.json",
+    "reviewTargetPath": "review-target.json",
     "runtimeAssetManifestPath": null
   },
   "risk": {

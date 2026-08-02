@@ -1,19 +1,16 @@
-# forge build — Antifragile Floor Hook
-# commit cd2109aeb0f7bc3c99b32225c171c1e5fd868330 | solc 0.8.26 cancun | optimizer runs=200
-# forge Version: 1.7.1
-
-Compiling 109 files with Solc 0.8.26
-Solc 0.8.26 finished in 19.47s
+Compiling 115 files with Solc 0.8.26
+Solc 0.8.26 finished in 30.71s
 Compiler run successful with warnings:
 Warning (2018): Function state mutability can be restricted to view
    --> test/ProgrammableFee.t.sol:165:5:
     |
 165 |     function _assertFee(AntifragileFloorHook h, PoolId id, Currency quote, Split memory s) internal {
     |     ^ (Relevant source part starts here and spans across multiple lines).
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ src\AntifragileFloorHook.sol:328:51
+    ╭▸ src\AntifragileFloorHook.sol:348:51
     │
-328 │             uint256 grossQuote = quoteDelta < 0 ? uint256(int256(-quoteDelta)) : uint256(int256(quoteDelta));
+348 │             uint256 grossQuote = quoteDelta < 0 ? uint256(int256(-quoteDelta)) : uint256(int256(quoteDelta));
     │                                                   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     │
     ├ note: consider disabling this lint if you're certain the cast is safe
@@ -23,10 +20,11 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ test\fork\AntifragileFork.t.sol:131:67
+    ╭▸ test\audit\AuditBase.sol:130:67
     │
-131 │             SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(quoteIn), sqrtPriceLimitX96: _lim(zeroForOne)}),
+130 │             SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(quoteIn), sqrtPriceLimitX96: _lim(zeroForOne)}),
     │                                                                   ━━━━━━━━━━━━━━━
     │
     ├ note: consider disabling this lint if you're certain the cast is safe
@@ -36,6 +34,21 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test\audit\AuditBase.sol:203:71
+    │
+203 │             SwapParams({zeroForOne: sellZeroForOne, amountSpecified: -int256(requestedTkn), sqrtPriceLimitX96: tightLimit}),
+    │                                                                       ━━━━━━━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'int256' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
     ╭▸ test\FloorHonor.t.sol:114:67
     │
@@ -49,6 +62,7 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
     ╭▸ test\FloorHonor.t.sol:181:24
     │
@@ -62,58 +76,7 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
-warning[unsafe-typecast]: typecasts that can truncate values should be checked
-   ╭▸ test\invariant\AntifragileDrainInvariant.t.sol:69:71
-   │
-69 │             SwapParams({zeroForOne: sellZeroForOne, amountSpecified: -int256(requested), sqrtPriceLimitX96: lim}),
-   │                                                                       ━━━━━━━━━━━━━━━━━
-   │
-   ├ note: consider disabling this lint if you're certain the cast is safe
-   │       
-   │       // casting to 'int256' is safe because [explain why]
-   │       // forge-lint: disable-next-line(unsafe-typecast)
-   │       
-   │       
-   ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
-warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ test\ProgrammableFee.t.sol:152:37
-    │
-152 │             s.gross = amtSpec < 0 ? uint256(-amtSpec) : uint256(amtSpec);
-    │                                     ━━━━━━━━━━━━━━━━━
-    │
-    ├ note: consider disabling this lint if you're certain the cast is safe
-    │       
-    │       // casting to 'uint256' is safe because [explain why]
-    │       // forge-lint: disable-next-line(unsafe-typecast)
-    │       
-    │       
-    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
-warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ test\ProgrammableFee.t.sol:152:57
-    │
-152 │             s.gross = amtSpec < 0 ? uint256(-amtSpec) : uint256(amtSpec);
-    │                                                         ━━━━━━━━━━━━━━━━
-    │
-    ├ note: consider disabling this lint if you're certain the cast is safe
-    │       
-    │       // casting to 'uint256' is safe because [explain why]
-    │       // forge-lint: disable-next-line(unsafe-typecast)
-    │       
-    │       
-    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
-warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ test\fork\AntifragileFork.t.sol:258:52
-    │
-258 │         Rec memory sell = _swap(h, key, id, true, -int256(sellTkn)); // zeroForOne sell (quote=currency1)
-    │                                                    ━━━━━━━━━━━━━━━
-    │
-    ├ note: consider disabling this lint if you're certain the cast is safe
-    │       
-    │       // casting to 'int256' is safe because [explain why]
-    │       // forge-lint: disable-next-line(unsafe-typecast)
-    │       
-    │       
-    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
     ╭▸ test\FloorHonor.t.sol:181:46
     │
@@ -127,6 +90,119 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test\ProgrammableFee.t.sol:152:37
+    │
+152 │             s.gross = amtSpec < 0 ? uint256(-amtSpec) : uint256(amtSpec);
+    │                                     ━━━━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'uint256' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test\audit\ReentrancyDeeper.t.sol:138:71
+    │
+138 │             SwapParams({zeroForOne: sellZeroForOne, amountSpecified: -int256(amt), sqrtPriceLimitX96: _lim(sellZeroForOne)}),
+    │                                                                       ━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'int256' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ src\AntifragileFloorHook.sol:348:82
+    │
+348 │             uint256 grossQuote = quoteDelta < 0 ? uint256(int256(-quoteDelta)) : uint256(int256(quoteDelta));
+    │                                                                                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'uint256' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   ╭▸ test\audit\FeeBypassAndAccounting.t.sol:79:65
+   │
+79 │                 SwapParams({zeroForOne: true, amountSpecified: -int256(grossPer), sqrtPriceLimitX96: MIN_PRICE_LIMIT}),
+   │                                                                 ━━━━━━━━━━━━━━━━
+   │
+   ├ note: consider disabling this lint if you're certain the cast is safe
+   │       
+   │       // casting to 'int256' is safe because [explain why]
+   │       // forge-lint: disable-next-line(unsafe-typecast)
+   │       
+   │       
+   ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test\fork\AntifragileFork.t.sol:131:67
+    │
+131 │             SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(quoteIn), sqrtPriceLimitX96: _lim(zeroForOne)}),
+    │                                                                   ━━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'int256' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   ╭▸ test\invariant\AntifragileDrainInvariant.t.sol:69:71
+   │
+69 │             SwapParams({zeroForOne: sellZeroForOne, amountSpecified: -int256(requested), sqrtPriceLimitX96: lim}),
+   │                                                                       ━━━━━━━━━━━━━━━━━
+   │
+   ├ note: consider disabling this lint if you're certain the cast is safe
+   │       
+   │       // casting to 'int256' is safe because [explain why]
+   │       // forge-lint: disable-next-line(unsafe-typecast)
+   │       
+   │       
+   ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test\FloorHonor.t.sol:228:59
+    │
+228 │         Rec memory r = _swap(h, key, id, sellZeroForOne, -int256(sellTkn));
+    │                                                           ━━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'int256' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test\ProgrammableFee.t.sol:152:57
+    │
+152 │             s.gross = amtSpec < 0 ? uint256(-amtSpec) : uint256(amtSpec);
+    │                                                         ━━━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'uint256' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
     ╭▸ test\ProgrammableFee.t.sol:157:38
     │
@@ -140,11 +216,12 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ src\AntifragileFloorHook.sol:328:82
+    ╭▸ src\AntifragileFloorHook.sol:351:44
     │
-328 │             uint256 grossQuote = quoteDelta < 0 ? uint256(int256(-quoteDelta)) : uint256(int256(quoteDelta));
-    │                                                                                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+351 │             ammQuoteOut = quoteDelta > 0 ? uint256(int256(quoteDelta)) : 0;
+    │                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━
     │
     ├ note: consider disabling this lint if you're certain the cast is safe
     │       
@@ -153,19 +230,7 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
-warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ test\ProgrammableFee.t.sol:157:61
-    │
-157 │             uint256 absQd = qd < 0 ? uint256(int256(-qd)) : uint256(int256(qd));
-    │                                                             ━━━━━━━━━━━━━━━━━━━
-    │
-    ├ note: consider disabling this lint if you're certain the cast is safe
-    │       
-    │       // casting to 'uint256' is safe because [explain why]
-    │       // forge-lint: disable-next-line(unsafe-typecast)
-    │       
-    │       
-    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
     ╭▸ test\ReserveDrainExploit.t.sol:105:35
     │
@@ -179,11 +244,12 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ src\AntifragileFloorHook.sol:331:44
+    ╭▸ test\ProgrammableFee.t.sol:157:61
     │
-331 │             ammQuoteOut = quoteDelta > 0 ? uint256(int256(quoteDelta)) : 0;
-    │                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+157 │             uint256 absQd = qd < 0 ? uint256(int256(-qd)) : uint256(int256(qd));
+    │                                                             ━━━━━━━━━━━━━━━━━━━
     │
     ├ note: consider disabling this lint if you're certain the cast is safe
     │       
@@ -192,11 +258,12 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ test\ProgrammableFee.t.sol:257:60
+    ╭▸ test\fork\AntifragileFork.t.sol:260:52
     │
-257 │             SwapParams({zeroForOne: true, amountSpecified: int256(requestedOut), sqrtPriceLimitX96: limit}),
-    │                                                            ━━━━━━━━━━━━━━━━━━━━
+260 │         Rec memory sell = _swap(h, key, id, true, -int256(sellTkn)); // zeroForOne sell (quote=currency1)
+    │                                                    ━━━━━━━━━━━━━━━
     │
     ├ note: consider disabling this lint if you're certain the cast is safe
     │       
@@ -205,6 +272,15 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[erc20-unchecked-transfer]: ERC20 'transfer' and 'transferFrom' calls should check the return value
+    ╭▸ test\audit\TokenModel.t.sol:130:13
+    │
+130 │             MockERC20(Currency.unwrap(tkn)).transfer(victim, sendToVictim);
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#erc20-unchecked-transfer
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
     ╭▸ test\ReserveDrainExploit.t.sol:133:71
     │
@@ -218,10 +294,39 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ src\AntifragileFloorHook.sol:338:40
+    ╭▸ test\ProgrammableFee.t.sol:257:60
     │
-338 │             execTknIn = tknDelta < 0 ? uint256(int256(-tknDelta)) : 0;
+257 │             SwapParams({zeroForOne: true, amountSpecified: int256(requestedOut), sqrtPriceLimitX96: limit}),
+    │                                                            ━━━━━━━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'int256' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test\FloorHonor.t.sol:262:49
+    │
+262 │         Rec memory r = _swap(h, key, id, true, -int256(tinySell)); // zeroForOne sell (quote=currency1)
+    │                                                 ━━━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'int256' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ src\AntifragileFloorHook.sol:358:40
+    │
+358 │             execTknIn = tknDelta < 0 ? uint256(int256(-tknDelta)) : 0;
     │                                        ━━━━━━━━━━━━━━━━━━━━━━━━━━
     │
     ├ note: consider disabling this lint if you're certain the cast is safe
@@ -231,6 +336,7 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[erc20-unchecked-transfer]: ERC20 'transfer' and 'transferFrom' calls should check the return value
     ╭▸ test\ProgrammableFee.t.sol:286:9
     │
@@ -238,19 +344,7 @@ warning[erc20-unchecked-transfer]: ERC20 'transfer' and 'transferFrom' calls sho
     │         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     │
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#erc20-unchecked-transfer
-warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ test\FloorHonor.t.sol:225:59
-    │
-225 │         Rec memory r = _swap(h, key, id, sellZeroForOne, -int256(sellTkn));
-    │                                                           ━━━━━━━━━━━━━━━
-    │
-    ├ note: consider disabling this lint if you're certain the cast is safe
-    │       
-    │       // casting to 'int256' is safe because [explain why]
-    │       // forge-lint: disable-next-line(unsafe-typecast)
-    │       
-    │       
-    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
     ╭▸ test\ReserveDrainExploit.t.sol:286:61
     │
@@ -264,6 +358,21 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test\audit\TokenModel.t.sol:141:49
+    │
+141 │         Rec memory r = _swap(h, key, id, true, -int256(attackerBag));
+    │                                                 ━━━━━━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'int256' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
     ╭▸ test\ProgrammableFee.t.sol:484:25
     │
@@ -277,23 +386,11 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ test\FloorHonor.t.sol:259:49
+    ╭▸ test\FloorHonor.t.sol:299:49
     │
-259 │         Rec memory r = _swap(h, key, id, true, -int256(tinySell)); // zeroForOne sell (quote=currency1)
-    │                                                 ━━━━━━━━━━━━━━━━
-    │
-    ├ note: consider disabling this lint if you're certain the cast is safe
-    │       
-    │       // casting to 'int256' is safe because [explain why]
-    │       // forge-lint: disable-next-line(unsafe-typecast)
-    │       
-    │       
-    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
-warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ test\FloorHonor.t.sol:296:49
-    │
-296 │         Rec memory r = _swap(h, key, id, true, -int256(sellTkn));
+299 │         Rec memory r = _swap(h, key, id, true, -int256(sellTkn));
     │                                                 ━━━━━━━━━━━━━━━
     │
     ├ note: consider disabling this lint if you're certain the cast is safe
@@ -303,10 +400,11 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
 warning[unsafe-typecast]: typecasts that can truncate values should be checked
-    ╭▸ test\FloorHonor.t.sol:400:48
+    ╭▸ test\FloorHonor.t.sol:403:48
     │
-400 │         Rec memory r = _swap(h, key, id, true, int256(wantQuote));
+403 │         Rec memory r = _swap(h, key, id, true, int256(wantQuote));
     │                                                ━━━━━━━━━━━━━━━━━
     │
     ├ note: consider disabling this lint if you're certain the cast is safe
@@ -316,3 +414,4 @@ warning[unsafe-typecast]: typecasts that can truncate values should be checked
     │       
     │       
     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+

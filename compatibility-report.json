@@ -1,7 +1,7 @@
 {
   "reportVersion": 2,
   "standardVersion": "1.3.0",
-  "submissionHash": "sha256:0afb3b25441c97b7a41f351bc4f7e5dfb574ac8426b5211c0b26d8efae537d39",
+  "submissionHash": "sha256:dc928f5d5e60cb37f2522107cf9bae16ff5fd485d576f3d0ebb147eb27574079",
   "toolchain": {
     "validatorSha256": "sha256:d3b4db147fbb955d0ecdff0d5d3a55d25a55a38bb72b33efe535d9c80c286318",
     "schemaSha256": "sha256:b3a67753b286a35a49d88a85e1bdaec50f19d86b241145901e2dd24327fd515a",
@@ -9,7 +9,7 @@
     "officialDeploymentReferenceSha256": "sha256:ef7e12bf1312edf374749bfeb18ac41cb83623856fbfd39892606579b7119fd6",
     "policyBundleSha256": "sha256:1c623966ae90b671ff423329c14f1dbfb0061a80f6cd33b25e6671ed98c61c3d"
   },
-  "decision": "REDESIGN_REQUIRED",
+  "decision": "PROTOTYPE_READY",
   "hookPermissionMask": "0x10cc",
   "risk": {
     "score": 13,
@@ -29,34 +29,6 @@
     ]
   },
   "findings": [
-    {
-      "severity": "blocker",
-      "code": "DEPLOYMENT_EVIDENCE_PATH_MISSING",
-      "path": "$.dependencies.onchain[0].deploymentEvidencePath",
-      "message": "An onchain prototype dependency has no structured runtime and source observation record.",
-      "remediation": "Add a repository-relative deployment evidence record; maintainers must independently reproduce it before release."
-    },
-    {
-      "severity": "blocker",
-      "code": "GATE_STATUS_PATH_MISSING",
-      "path": "$.implementation.gateStatusPath",
-      "message": "Required design text is missing or contains a placeholder.",
-      "remediation": "Replace the placeholder with a specific, testable statement."
-    },
-    {
-      "severity": "blocker",
-      "code": "ONCHAIN_SOURCE_IDENTITY_INCOMPLETE",
-      "path": "$.dependencies.onchain[0]",
-      "message": "Address identity is not source identity; the onchain dependency lacks a pinned source and runtime tuple.",
-      "remediation": "Record the exact repository and revision or package, plus deployed runtime hash and structured observation evidence."
-    },
-    {
-      "severity": "blocker",
-      "code": "REVIEW_TARGET_PATH_MISSING",
-      "path": "$.implementation.reviewTargetPath",
-      "message": "Required design text is missing or contains a placeholder.",
-      "remediation": "Replace the placeholder with a specific, testable statement."
-    },
     {
       "severity": "warning",
       "code": "BEFORE_SWAP_RETURN_DELTA_CRITICAL",

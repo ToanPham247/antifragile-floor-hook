@@ -1,7 +1,7 @@
 {
   "reportVersion": 2,
   "standardVersion": "1.3.0",
-  "submissionHash": "sha256:8139fae93daca5af2f1d5539dc018bb754e284e1cad0aeee04783d75c3fea5bc",
+  "submissionHash": "sha256:d787a24f8748a3e70a6f7ff38002a5ab8349af789de2bb8d3eb7d40db9ae7cae",
   "toolchain": {
     "validatorSha256": "sha256:d3b4db147fbb955d0ecdff0d5d3a55d25a55a38bb72b33efe535d9c80c286318",
     "schemaSha256": "sha256:b3a67753b286a35a49d88a85e1bdaec50f19d86b241145901e2dd24327fd515a",
@@ -42,27 +42,6 @@
       "path": "$.capabilityExtensions[0]",
       "message": "Novel capability enforced-monotonic-redemption-floor is preserved for architecture review rather than forced into the current catalog.",
       "remediation": "Review its declared interactions, trust boundary, failure mode, schema and exact source/evidence bytes before defining adapters or approval requirements."
-    },
-    {
-      "severity": "warning",
-      "code": "PACKAGE_SOURCE_PROVENANCE_MISSING",
-      "path": "$.integration.sdkDependencies[1]",
-      "message": "The exact registry package is bound by version and sha512 integrity, but its source repository is not declared.",
-      "remediation": "Add a matching HTTPS source repository and exact commit when available; otherwise keep this limitation explicit for attributable dependency review."
-    },
-    {
-      "severity": "warning",
-      "code": "PACKAGE_SOURCE_PROVENANCE_MISSING",
-      "path": "$.integration.sdkDependencies[2]",
-      "message": "The exact registry package is bound by version and sha512 integrity, but its source repository is not declared.",
-      "remediation": "Add a matching HTTPS source repository and exact commit when available; otherwise keep this limitation explicit for attributable dependency review."
-    },
-    {
-      "severity": "warning",
-      "code": "PACKAGE_SOURCE_PROVENANCE_MISSING",
-      "path": "$.integration.sdkDependencies[3]",
-      "message": "The exact registry package is bound by version and sha512 integrity, but its source repository is not declared.",
-      "remediation": "Add a matching HTTPS source repository and exact commit when available; otherwise keep this limitation explicit for attributable dependency review."
     },
     {
       "severity": "warning",
@@ -143,16 +122,6 @@
       "id": "novel-project-capability-architecture-review",
       "stage": "candidate",
       "reason": "At least one open capability kind is outside the acceleration catalog."
-    },
-    {
-      "id": "package-source-provenance-architecture-review",
-      "stage": "candidate",
-      "reason": "High-risk projects must resolve the trust boundary and review method for package dependencies whose source provenance is unavailable."
-    },
-    {
-      "id": "package-source-provenance-review",
-      "stage": "candidate",
-      "reason": "Exact registry artifacts without declared source provenance require attributable dependency review: @openzeppelin/contracts, @uniswap/v4-core, @uniswap/v4-periphery."
     },
     {
       "id": "pinned-fork-and-current-head-smoke",

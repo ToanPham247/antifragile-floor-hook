@@ -893,22 +893,22 @@
         "packageName": "@openzeppelin/contracts",
         "version": "5.5.0",
         "integrity": "sha512-R8hq4zmKKWP2c7OxeRgAcjZwvF5W0Qq2OIX7degrtdM52Q9xYr4MLJdUAVPKGUewNJ1qo+M6YiZLLnNUnjP/gg==",
-        "repository": null,
-        "revision": null
+        "repository": "https://github.com/OpenZeppelin/openzeppelin-contracts",
+        "revision": "fcbae5394ae8ad52d8e580a3477db99814b9d565"
       },
       {
         "packageName": "@uniswap/v4-core",
         "version": "1.0.2",
         "integrity": "sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg==",
-        "repository": null,
-        "revision": null
+        "repository": "https://github.com/Uniswap/v4-core",
+        "revision": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc"
       },
       {
         "packageName": "@uniswap/v4-periphery",
         "version": "1.0.3",
         "integrity": "sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg==",
-        "repository": null,
-        "revision": null
+        "repository": "https://github.com/Uniswap/v4-periphery",
+        "revision": "60cd93803ac2b7fa65fd6cd351fd5fd4cc8c9db5"
       }
     ],
     "routerActionProfile": {

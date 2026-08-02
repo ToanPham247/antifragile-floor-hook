@@ -1,0 +1,24 @@
+# Antifragile Floor Hook — Foundry configuration
+# Coherent pinned baseline (see compatibility.lock.json):
+#   @openzeppelin/uniswap-hooks 1.1.1 -> @openzeppelin/contracts 5.5.0,
+#   @uniswap/v4-core 1.0.2, @uniswap/v4-periphery 1.0.3, forge-std 1.9.3
+#
+# solc 0.8.26 + evm_version cancun are required by Uniswap v4 (transient storage / EIP-1153).
+# Remappings live in remappings.txt (auto-detection disabled for deterministic resolution).
+
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["node_modules"]
+auto_detect_remappings = false
+solc = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+bytecode_hash = "none"
+
+[profile.default.fuzz]
+runs = 256
+
+# See more config options https://github.com/foundry-rs/foundry/tree/master/config

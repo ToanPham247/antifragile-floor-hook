@@ -1,0 +1,12 @@
+# Foundry build artifacts
+out/
+cache/
+broadcast/
+.forge-snapshots/
+
+# Node dependencies (reconstruct with `npm install --ignore-scripts`; pinned by package-lock.json)
+node_modules/
+
+# Env / secrets
+.env
+.env.*

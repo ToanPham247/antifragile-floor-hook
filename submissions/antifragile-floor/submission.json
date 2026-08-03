@@ -904,7 +904,7 @@
         "deploymentRecordId": "v4-poolmanager-ethereum",
         "chainAddress": "0x000000000004444c5dc75cB358380D2e3dE08A90",
         "runtimeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
-        "deploymentEvidencePath": "submissions/antifragile-floor-hook/deployment-evidence.json",
+        "deploymentEvidencePath": "submissions/antifragile-floor/deployment-evidence.json",
         "trust": "Immutable Ethereum-mainnet v4 PoolManager (address from deployment record v4-poolmanager-ethereum). The hook compiles against @uniswap/v4-core 1.0.2 per compatibility.lock.json. The mainnet PoolManager runtime is observed: runtimeHash from cast codehash at block 25666892 and head, plus a Sourcify runtime+creation source match (deployment-evidence.json), validated by the test/fork/* pinned+head suite. Contributor-declared, untrusted until maintainers reproduce; the hook is not deployed.",
         "failure": "A missing or mismatched PoolManager runtime blocks preparation; at runtime every callback is onlyPoolManager and any PoolManager revert reverts the whole swap atomically.",
         "fallback": "No silent fallback: the bound runtime hash and the Sourcify runtime+source match are reproducible from deployment-evidence.json; maintainers must independently reproduce them before release."
@@ -1654,9 +1654,9 @@
     ],
     "specificationPath": "docs/PROGRAMMABLE_FEE.md",
     "testEvidencePath": ".gas-snapshot",
-    "dependencyLockPath": "submissions/antifragile-floor-hook/dependency-lock.json",
-    "gateStatusPath": "submissions/antifragile-floor-hook/gate-status.json",
-    "reviewTargetPath": "submissions/antifragile-floor-hook/review-target.json",
+    "dependencyLockPath": "submissions/antifragile-floor/dependency-lock.json",
+    "gateStatusPath": "submissions/antifragile-floor/gate-status.json",
+    "reviewTargetPath": "submissions/antifragile-floor/review-target.json",
     "runtimeAssetManifestPath": null
   },
   "risk": {

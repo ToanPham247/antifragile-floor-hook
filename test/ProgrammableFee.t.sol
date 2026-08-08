@@ -53,10 +53,16 @@ contract ProgrammableFeeTest is Test, Deployers {
     /* ------------------------------------------------------------------ */
 
     function _deployHook(uint16 feeTotalBps, Currency quote) internal returns (AntifragileFloorHook h) {
-        bytes memory args = abi.encode(IPoolManager(address(manager)), feeTotalBps, quote);
+        // Precommit the non-quote currency as the expected launch token, plus the canonical 1:1 price + TS,
+        // matching the pool {_initPool} binds.
+        address expectedToken = Currency.unwrap(quote == currency0 ? currency1 : currency0);
+        bytes memory args =
+            abi.encode(IPoolManager(address(manager)), feeTotalBps, quote, expectedToken, SQRT_PRICE_1_1, TS);
         (address addr, bytes32 salt) =
             HookMiner.find(address(this), FLAGS, type(AntifragileFloorHook).creationCode, args);
-        h = new AntifragileFloorHook{salt: salt}(IPoolManager(address(manager)), feeTotalBps, quote);
+        h = new AntifragileFloorHook{salt: salt}(
+            IPoolManager(address(manager)), feeTotalBps, quote, expectedToken, SQRT_PRICE_1_1, TS
+        );
         require(address(h) == addr, "mine");
     }
 

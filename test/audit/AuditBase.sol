@@ -99,11 +99,22 @@ abstract contract AuditBase is Test, Deployers {
     /*                           Deploy + init                            */
     /* ------------------------------------------------------------------ */
 
+    /// @dev Deploy precommitting the exact launch identity for THIS harness's pool: `tkn` (the non-quote
+    ///      currency that {_init} pairs with `quote`), the canonical 1:1 start price and tick spacing `TS`.
     function _deployHook(uint16 feeTotalBps) internal returns (AntifragileFloorHook h) {
-        bytes memory args = abi.encode(IPoolManager(address(manager)), feeTotalBps, quote);
+        return _deployHookFor(feeTotalBps, Currency.unwrap(tkn));
+    }
+
+    /// @dev Deploy precommitting an EXPLICIT expected token (for binding/capture probes that init a pool
+    ///      whose non-quote side may differ from `tkn`). Price/spacing precommits stay canonical (1:1, TS).
+    function _deployHookFor(uint16 feeTotalBps, address expectedToken) internal returns (AntifragileFloorHook h) {
+        bytes memory args =
+            abi.encode(IPoolManager(address(manager)), feeTotalBps, quote, expectedToken, SQRT_PRICE_1_1, TS);
         (address addr, bytes32 salt) =
             HookMiner.find(address(this), FLAGS, type(AntifragileFloorHook).creationCode, args);
-        h = new AntifragileFloorHook{salt: salt}(IPoolManager(address(manager)), feeTotalBps, quote);
+        h = new AntifragileFloorHook{salt: salt}(
+            IPoolManager(address(manager)), feeTotalBps, quote, expectedToken, SQRT_PRICE_1_1, TS
+        );
         require(address(h) == addr, "mine");
     }
 

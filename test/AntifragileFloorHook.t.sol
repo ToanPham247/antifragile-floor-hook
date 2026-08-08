@@ -42,7 +42,12 @@ contract AntifragileFloorHookTest is Test, Deployers {
         // Sanity: the flag set we mine for is exactly the intended mask.
         assertEq(uint256(flags), uint256(EXPECTED_MASK), "flag set != 0x10cc");
 
-        bytes memory constructorArgs = abi.encode(IPoolManager(address(manager)), FEE_TOTAL_BPS, quote);
+        // The (now 6-arg) constructor precommits the exact launch pool identity. This scaffold never
+        // initializes a pool, so any valid precommit works: the non-quote currency as the expected token,
+        // the canonical 1:1 start price and a valid tick spacing.
+        address expectedToken = Currency.unwrap(currency1); // quote == currency0 here
+        bytes memory constructorArgs =
+            abi.encode(IPoolManager(address(manager)), FEE_TOTAL_BPS, quote, expectedToken, SQRT_PRICE_1_1, int24(60));
 
         // Mine a CREATE2 salt whose resulting address encodes the required permission bits.
         (address hookAddress, bytes32 salt) =
@@ -50,7 +55,9 @@ contract AntifragileFloorHookTest is Test, Deployers {
 
         // Deploy at the mined address. BaseHook's constructor re-validates the address<->permission
         // match, so a wrong mask here would revert deployment.
-        hook = new AntifragileFloorHook{salt: salt}(IPoolManager(address(manager)), FEE_TOTAL_BPS, quote);
+        hook = new AntifragileFloorHook{salt: salt}(
+            IPoolManager(address(manager)), FEE_TOTAL_BPS, quote, expectedToken, SQRT_PRICE_1_1, int24(60)
+        );
         assertEq(address(hook), hookAddress, "deployed address != mined address");
     }
 

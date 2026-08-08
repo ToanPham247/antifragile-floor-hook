@@ -53,9 +53,14 @@ contract HardValuesTest is Test, Deployers {
     }
 
     function _deployHook(uint16 feeBps, Currency q) internal returns (AntifragileFloorHook h) {
-        bytes memory args = abi.encode(IPoolManager(address(manager)), feeBps, q);
+        // Precommit the non-quote currency as the expected launch token, plus the canonical 1:1 price + TS.
+        address expectedToken = Currency.unwrap(q == currency0 ? currency1 : currency0);
+        bytes memory args =
+            abi.encode(IPoolManager(address(manager)), feeBps, q, expectedToken, SQRT_PRICE_1_1, TS);
         (address addr, bytes32 salt) = HookMiner.find(address(this), FLAGS, type(AntifragileFloorHook).creationCode, args);
-        h = new AntifragileFloorHook{salt: salt}(IPoolManager(address(manager)), feeBps, q);
+        h = new AntifragileFloorHook{salt: salt}(
+            IPoolManager(address(manager)), feeBps, q, expectedToken, SQRT_PRICE_1_1, TS
+        );
         require(address(h) == addr, "mine");
     }
 
@@ -123,7 +128,9 @@ contract HardValuesTest is Test, Deployers {
     }
 
     /* ================================================================== */
-    /*  1-wei swap executes; fee ceils; no corruption (both orderings)     */
+    /*  1-wei dust swap is REJECTED (fee consumes the whole input, no AMM    */
+    /*  leg): reverts DustNoAmmLeg; no accrual; solvency intact (both        */
+    /*  orderings). This is the hardened one-wei defect closure.            */
     /* ================================================================== */
 
     function test_oneWeiSwap_quote0() public {
@@ -136,15 +143,15 @@ contract HardValuesTest is Test, Deployers {
 
     function _oneWei(bool quoteIs0) internal {
         (AntifragileFloorHook h, PoolKey memory key, PoolId id) = _setup(quoteIs0);
-        // before-quadrant sell of 1 wei of the quote (exact-output on the quote side keeps gross = 1 wei):
-        // simplest: an exact-input swap of 1 wei on the quote-specified side.
-        // Use a quote-specified swap so gross is exactly 1 and the fee ceils to 1 wei.
-        bool zeroForOne = (quote == currency0); // buy: quote in, quote is specified (exact-input)
+        // A 1-wei quote-specified exact-INPUT swap: with effective 30% the mandatory fee ceils to 1 wei and
+        // consumes the ENTIRE 1-wei input, leaving NO positive AMM leg. The hardened hook rejects this dust
+        // (executed-basis-or-revert), reverting DustNoAmmLeg — v4 wraps the hook error in a WrappedError.
+        uint256 claimsBefore = _claims(h);
+        bool zeroForOne = (quote == currency0); // buy: quote in, quote is the specified (exact-input) currency
+        vm.expectRevert(); // wrapped AntifragileFloorHook.DustNoAmmLeg
         _swap(key, zeroForOne, -int256(1), ZERO_BYTES);
-        // fee on gross=1 with 30% effective ceils to 1 wei total; platform ceils to 1 wei.
-        uint256 total = _claims(h);
-        assertEq(total, _ceilDiv(1 * h.effectiveRate(), RATE_DENOM), "1-wei fee not ceil-correct");
-        assertGt(total, 0, "1-wei swap should still charge a ceil fee");
+        // Nothing accrued (the whole swap reverted atomically) and the hook is still solvent.
+        assertEq(_claims(h), claimsBefore, "reverted dust swap must not accrue");
         _assertSolvent(h, id);
     }
 

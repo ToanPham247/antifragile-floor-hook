@@ -114,6 +114,15 @@ contract AntifragileFloorHook is BaseHook {
     /// @notice The pool's quote asset. Fees are always measured and collected in this currency.
     Currency public immutable quoteCurrency;
 
+    /// @notice The EXACT launched (non-quote) token this hook is precommitted to at construction. {_afterInitialize}
+    ///         reverts {WrongToken} for any other token, so an attacker cannot front-run the first initialization
+    ///         and capture the hook with a foreign token/pool (the reviewed first-pool-capture defect).
+    address public immutable EXPECTED_TOKEN;
+    /// @notice The EXACT sqrtPriceX96 the canonical pool must be initialized at (precommit).
+    uint160 public immutable EXPECTED_SQRT_PRICE_X96;
+    /// @notice The EXACT tick spacing of the canonical PoolKey (precommit).
+    int24 public immutable EXPECTED_TICK_SPACING;
+
     /* ------------------------------------------------------------------ */
     /*                          Bound-pool state                          */
     /* ------------------------------------------------------------------ */
@@ -195,17 +204,51 @@ contract AntifragileFloorHook is BaseHook {
     error NotOwner();
     /// @dev Claim destination is the zero address.
     error InvalidDestination();
+    /// @dev The launch precommit (token / start price / tick spacing) is zero or malformed in the constructor.
+    error BadLaunchPrecommit();
+    /// @dev The initialized pool's non-quote token does not equal the precommitted EXPECTED_TOKEN.
+    error WrongToken();
+    /// @dev The initialized pool's start price does not equal the precommitted EXPECTED_SQRT_PRICE_X96.
+    error WrongStartPrice();
+    /// @dev The initialized pool's tick spacing does not equal the precommitted EXPECTED_TICK_SPACING.
+    error WrongTickSpacing();
+    /// @dev A quote-SPECIFIED (before-quadrant) swap partial-filled against a price limit. The mandatory fee is
+    ///      charged in {_beforeSwap} on the requested amount, which is only executed-basis on a full fill; a
+    ///      partial fill would overcharge the executed quote, so the whole swap reverts (executed-basis-or-revert).
+    error PartialFillNotSupported();
+    /// @dev A quote-SPECIFIED exact-input dust swap whose fee consumes the entire input, leaving no positive AMM
+    ///      leg. The reviewed one-wei defect (fee taken, zero core swap); rejected.
+    error DustNoAmmLeg();
 
     /**
      * @param _pm The Uniswap v4 PoolManager singleton.
      * @param _feeTotalBps The configured total fee in basis points.
      * @param _quote The pool's quote currency (the asset fees are measured/collected in).
+     * @param _expectedToken The EXACT launched (non-quote) token this hook is precommitted to.
+     * @param _expectedSqrtPriceX96 The EXACT sqrtPriceX96 the canonical pool must be initialized at.
+     * @param _expectedTickSpacing The EXACT tick spacing of the canonical PoolKey.
      */
-    constructor(IPoolManager _pm, uint16 _feeTotalBps, Currency _quote) BaseHook(_pm) {
+    constructor(
+        IPoolManager _pm,
+        uint16 _feeTotalBps,
+        Currency _quote,
+        address _expectedToken,
+        uint160 _expectedSqrtPriceX96,
+        int24 _expectedTickSpacing
+    ) BaseHook(_pm) {
+        // Precommit the exact launch PoolKey identity. Token must be non-zero and distinct from the quote,
+        // price must be non-zero, and tick spacing must be a valid v4 spacing (1..32767).
+        if (_expectedToken == address(0) || _expectedToken == Currency.unwrap(_quote)) revert BadLaunchPrecommit();
+        if (_expectedSqrtPriceX96 == 0) revert BadLaunchPrecommit();
+        if (_expectedTickSpacing <= 0 || _expectedTickSpacing > 32767) revert BadLaunchPrecommit();
+
         feeTotalBps = _feeTotalBps;
         uint256 selected = uint256(_feeTotalBps) * 100;
         effectiveRate = selected < PLATFORM_RATE ? PLATFORM_RATE : selected;
         quoteCurrency = _quote;
+        EXPECTED_TOKEN = _expectedToken;
+        EXPECTED_SQRT_PRICE_X96 = _expectedSqrtPriceX96;
+        EXPECTED_TICK_SPACING = _expectedTickSpacing;
     }
 
     /* ------------------------------------------------------------------ */
@@ -242,7 +285,7 @@ contract AntifragileFloorHook is BaseHook {
      *      {PoolAlreadyBound} on any second init, so {backedSupplySnapshot} below is captured set-once
      *      and is effectively immutable thereafter.
      */
-    function _afterInitialize(address, PoolKey calldata key, uint160, int24)
+    function _afterInitialize(address, PoolKey calldata key, uint160 sqrtPriceX96, int24)
         internal
         override
         returns (bytes4)
@@ -251,8 +294,15 @@ contract AntifragileFloorHook is BaseHook {
         if (!(key.currency0 == q) && !(key.currency1 == q)) revert NotQuotePool();
         if (_bound) revert PoolAlreadyBound();
 
-        _bound = true;
+        // Precommitted launch identity: the non-quote token, start price and tick spacing must match the
+        // constructor commitments EXACTLY. This closes the reviewed first-pool-capture defect — an attacker
+        // cannot front-run the first initialization and bind the hook to a foreign token/pool.
         Currency t = key.currency0 == q ? key.currency1 : key.currency0;
+        if (Currency.unwrap(t) != EXPECTED_TOKEN) revert WrongToken();
+        if (sqrtPriceX96 != EXPECTED_SQRT_PRICE_X96) revert WrongStartPrice();
+        if (key.tickSpacing != EXPECTED_TICK_SPACING) revert WrongTickSpacing();
+
+        _bound = true;
         tknCurrency = t;
         poolId = key.toId();
         // SECURITY (audit finding 1.2): snapshot the TKN supply ONCE, at bind time. The floor is driven by
@@ -337,6 +387,26 @@ contract AntifragileFloorHook is BaseHook {
         {
             bool specifiedTokenIs0 = (params.amountSpecified < 0) == params.zeroForOne;
             quoteIsUnspecified = (key.currency0 == quoteCurrency) != specifiedTokenIs0;
+        }
+
+        // ---- 0. BEFORE-quadrant executed-basis guard: quote was the SPECIFIED currency, so the mandatory fee
+        //      was charged in {_beforeSwap} on the REQUESTED |amountSpecified| via a beforeSwapReturnDelta that
+        //      carved `total` off the swap. The AMM leg reported HERE therefore executes `requested - total`
+        //      (exact-input) or `requested + total` (exact-output) on a FULL fill. A smaller AMM leg = a
+        //      price-limited PARTIAL fill, where the fee (on `requested`) would OVERCHARGE the executed quote,
+        //      so the whole swap reverts; a dust exact-input whose fee consumes the entire input leaves no
+        //      positive AMM leg and also reverts (executed-basis-or-revert — the reviewed partial-fill + one-wei
+        //      fee defects). Quote-unspecified swaps charge on the executed delta below and never hit this. ----
+        if (!quoteIsUnspecified) {
+            bool specifiedTokenIs0 = (params.amountSpecified < 0) == params.zeroForOne;
+            int128 sd = specifiedTokenIs0 ? delta.amount0() : delta.amount1();
+            uint256 execSpec = sd < 0 ? uint256(int256(-sd)) : uint256(int256(sd));
+            uint256 req =
+                params.amountSpecified < 0 ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
+            uint256 total = _ceilDiv(req * effectiveRate, RATE_DENOM);
+            uint256 expectedAmm = params.amountSpecified < 0 ? (req > total ? req - total : 0) : (req + total);
+            if (expectedAmm == 0) revert DustNoAmmLeg();
+            if (execSpec != expectedAmm) revert PartialFillNotSupported();
         }
 
         // ---- 1. Fee (after-quadrant only; before-quadrant already collected in _beforeSwap) ----

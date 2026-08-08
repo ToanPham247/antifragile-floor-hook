@@ -100,10 +100,16 @@ abstract contract AntifragileForkHarness is Test, Deployers {
     }
 
     function _deployHook(uint16 feeTotalBps) internal returns (AntifragileFloorHook h) {
-        bytes memory args = abi.encode(IPoolManager(address(manager)), feeTotalBps, quote);
+        // Precommit the exact launch identity of the pool {_init} binds: the non-quote token `tkn`,
+        // the canonical 1:1 start price and tick spacing TS.
+        address expectedToken = Currency.unwrap(tkn);
+        bytes memory args =
+            abi.encode(IPoolManager(address(manager)), feeTotalBps, quote, expectedToken, SQRT_PRICE_1_1, TS);
         (address addr, bytes32 salt) =
             HookMiner.find(address(this), FLAGS, type(AntifragileFloorHook).creationCode, args);
-        h = new AntifragileFloorHook{salt: salt}(IPoolManager(address(manager)), feeTotalBps, quote);
+        h = new AntifragileFloorHook{salt: salt}(
+            IPoolManager(address(manager)), feeTotalBps, quote, expectedToken, SQRT_PRICE_1_1, TS
+        );
         require(address(h) == addr, "mine");
     }
 

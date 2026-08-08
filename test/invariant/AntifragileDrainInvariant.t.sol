@@ -126,9 +126,15 @@ contract AntifragileDrainInvariant is Test, Deployers {
         MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), type(uint256).max);
         MockERC20(Currency.unwrap(currency1)).approve(address(swapRouter), type(uint256).max);
 
-        bytes memory args = abi.encode(IPoolManager(address(manager)), uint16(3000), quote);
+        // Precommit the exact launch identity of the pool bound below: the non-quote token `tkn`,
+        // the canonical 1:1 start price and tick spacing TS.
+        address expectedToken = Currency.unwrap(tkn);
+        bytes memory args =
+            abi.encode(IPoolManager(address(manager)), uint16(3000), quote, expectedToken, SQRT_PRICE_1_1, TS);
         (address addr, bytes32 salt) = HookMiner.find(address(this), FLAGS, type(AntifragileFloorHook).creationCode, args);
-        hook = new AntifragileFloorHook{salt: salt}(IPoolManager(address(manager)), uint16(3000), quote);
+        hook = new AntifragileFloorHook{salt: salt}(
+            IPoolManager(address(manager)), uint16(3000), quote, expectedToken, SQRT_PRICE_1_1, TS
+        );
         require(address(hook) == addr, "mine");
         poolKey = PoolKey(currency0, currency1, FEE, TS, IHooks(address(hook)));
         poolId = poolKey.toId();

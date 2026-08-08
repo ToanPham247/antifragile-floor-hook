@@ -12,17 +12,17 @@ import {AntifragileFloorHook} from "../../src/AntifragileFloorHook.sol";
 
 /**
  * @title BindingFrontrun
- * @notice AUDIT — Vector 4 (afterInitialize binding lifecycle).
+ * @notice AUDIT — Vector 4 (afterInitialize binding lifecycle), post-hardening.
  *
- * `_afterInitialize` binds the hook to the FIRST initialized pool that merely CONTAINS `quoteCurrency`;
- * the other side becomes `tknCurrency`, with no check that it is the intended token, and `_bound` blocks
- * any re-bind. Consequences probed here:
+ * `_afterInitialize` binds the hook to its canonical pool, but the launch identity — the exact non-quote
+ * token, start price and tick spacing — is PRECOMMITTED into the hook's immutables at construction
+ * (EXPECTED_TOKEN / EXPECTED_SQRT_PRICE_X96 / EXPECTED_TICK_SPACING). Any pool that does not match reverts
+ * (WrongToken / WrongStartPrice / WrongTickSpacing), and `_bound` still blocks any re-bind. This closes the
+ * previously-reviewed first-pool-capture / binding-front-run defect. Consequences probed here:
  *
- *   (1) GRIEFING / DoS: anyone can front-run the canonical initialization by binding the hook to a pool
- *       of (quote, ATTACKER_TOKEN). The intended (quote, realToken) pool then reverts `PoolAlreadyBound`,
- *       permanently souring THIS hook address. Severity is LOW: the hook address is CREATE2-mined and
- *       single-use, the attacker extracts nothing (owner + reserve are inert on a junk pair), and the
- *       remedy is to re-mine/redeploy — but a deployer MUST initialize atomically to avoid the grief.
+ *   (1) FRONT-RUN DEFEATED: an attacker who front-runs the canonical initialization with a pool of
+ *       (quote, ATTACKER_TOKEN) can no longer capture the hook — the init REVERTS WrongToken and the hook
+ *       stays unbound, so the intended (quote, realToken) pool still binds cleanly afterwards.
  *
  *   (2) The binding is quote-anchored and one-shot: a non-quote pool can never bind (NotQuotePool), and a
  *       second quote pool can never re-bind (PoolAlreadyBound). No hook can serve two pools.
@@ -44,37 +44,40 @@ contract BindingFrontrun is AuditBase {
     }
 
     /* ================================================================== */
-    /*  A front-runner binds the hook to (quote, ATTACKER_TOKEN); the        */
-    /*  intended (quote, realToken) pool is then permanently un-bindable.    */
+    /*  A front-runner CANNOT bind the hook to (quote, ATTACKER_TOKEN): the   */
+    /*  init reverts WrongToken, the hook stays unbound, and the intended     */
+    /*  (quote, realToken) pool still binds cleanly afterwards.               */
     /* ================================================================== */
 
-    function test_bindingFrontRun_bindsWrongTkn_thenRealPoolDoSed() public {
-        // The project mints a hook committed to a quote asset.
+    function test_bindingFrontRun_foreignToken_reverts_realBindsClean() public {
+        // The project mints a hook PRECOMMITTED to the real launch token + canonical 1:1 price + TS.
         MockERC20 q = new MockERC20("QUOTE", "Q", 18);
         MockERC20 real = new MockERC20("REAL", "R", 18);
         MockERC20 evil = new MockERC20("EVIL", "E", 18);
         quote = Currency.wrap(address(q));
 
-        AntifragileFloorHook h = _deployHook(3000);
+        AntifragileFloorHook h = _deployHookFor(3000, address(real));
         assertEq(Currency.unwrap(h.tknCurrency()), address(0), "tkn not yet bound");
+        assertEq(h.EXPECTED_TOKEN(), address(real), "hook must precommit the real token");
 
-        // ---- ATTACKER front-runs: initialize (quote, EVIL) with this hook FIRST. ----
+        // ---- ATTACKER front-runs: initialize (quote, EVIL) with this hook FIRST. Same price + tick spacing,
+        //      only the token differs -> reverts WrongToken (the front-run is defeated). ----
         (Currency e0, Currency e1) = SortTokens.sort(q, evil);
         PoolKey memory evilKey = PoolKey(e0, e1, FEE, TS, IHooks(address(h)));
-        manager.initialize(evilKey, SQRT_PRICE_1_1);
+        try manager.initialize(evilKey, SQRT_PRICE_1_1) {
+            revert("evil pool should have been rejected by WrongToken");
+        } catch (bytes memory err) {
+            assertTrue(_find4(err, AntifragileFloorHook.WrongToken.selector), "inner != WrongToken");
+        }
+        // The hook is STILL UNBOUND: the attacker captured nothing.
+        assertEq(Currency.unwrap(h.tknCurrency()), address(0), "hook must remain unbound after a rejected front-run");
 
-        // The hook is now bound to the ATTACKER's token, not the real one.
-        assertEq(Currency.unwrap(h.tknCurrency()), address(evil), "hook bound to attacker token");
-        assertEq(PoolId.unwrap(h.poolId()), PoolId.unwrap(evilKey.toId()), "poolId bound to evil pool");
-
-        // ---- The intended (quote, REAL) pool can no longer bind: DoS. ----
+        // ---- The intended (quote, REAL) pool binds cleanly: no DoS. ----
         (Currency r0, Currency r1) = SortTokens.sort(q, real);
         PoolKey memory realKey = PoolKey(r0, r1, FEE, TS, IHooks(address(h)));
-        try manager.initialize(realKey, SQRT_PRICE_1_1) {
-            revert("real pool should have been blocked by PoolAlreadyBound");
-        } catch (bytes memory err) {
-            assertTrue(_find4(err, AntifragileFloorHook.PoolAlreadyBound.selector), "inner != PoolAlreadyBound");
-        }
+        manager.initialize(realKey, SQRT_PRICE_1_1);
+        assertEq(Currency.unwrap(h.tknCurrency()), address(real), "real pool must bind after the front-run failed");
+        assertEq(PoolId.unwrap(h.poolId()), PoolId.unwrap(realKey.toId()), "poolId bound to the real pool");
     }
 
     /* ================================================================== */
@@ -86,7 +89,8 @@ contract BindingFrontrun is AuditBase {
         MockERC20 t1 = new MockERC20("T1", "T1", 18);
         MockERC20 t2 = new MockERC20("T2", "T2", 18);
         quote = Currency.wrap(address(q));
-        AntifragileFloorHook h = _deployHook(3000);
+        // Precommit t1 as the launch token; the (quote, t1) pool then binds, and (quote, t2) is a re-bind.
+        AntifragileFloorHook h = _deployHookFor(3000, address(t1));
 
         (Currency a0, Currency a1) = SortTokens.sort(q, t1);
         manager.initialize(PoolKey(a0, a1, FEE, TS, IHooks(address(h))), SQRT_PRICE_1_1);
@@ -112,7 +116,9 @@ contract BindingFrontrun is AuditBase {
         MockERC20 x = new MockERC20("X", "X", 18);
         MockERC20 y = new MockERC20("Y", "Y", 18);
         quote = Currency.wrap(address(q));
-        AntifragileFloorHook h = _deployHook(3000);
+        // Any valid precommit works: the pool below contains neither `quote`, so it reverts NotQuotePool
+        // BEFORE the token precommit is ever checked.
+        AntifragileFloorHook h = _deployHookFor(3000, address(x));
 
         (Currency c0, Currency c1) = SortTokens.sort(x, y); // neither is quote
         try manager.initialize(PoolKey(c0, c1, FEE, TS, IHooks(address(h))), SQRT_PRICE_1_1) {

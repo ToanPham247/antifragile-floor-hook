@@ -109,10 +109,15 @@ contract AntifragileTwoPoolInvariant is Test, Deployers {
         (c0, c1) = SortTokens.sort(a, b);
     }
 
-    function _deploy(uint16 feeBps, Currency quote) internal returns (AntifragileFloorHook h) {
-        bytes memory args = abi.encode(IPoolManager(address(manager)), feeBps, quote);
+    function _deploy(uint16 feeBps, Currency quote, address expectedToken) internal returns (AntifragileFloorHook h) {
+        // Precommit the exact launch identity of the pool this hook will bind ({_initAndSeed}): the given
+        // non-quote token, the canonical 1:1 start price and tick spacing TS.
+        bytes memory args =
+            abi.encode(IPoolManager(address(manager)), feeBps, quote, expectedToken, SQRT_PRICE_1_1, TS);
         (address addr, bytes32 salt) = HookMiner.find(address(this), FLAGS, type(AntifragileFloorHook).creationCode, args);
-        h = new AntifragileFloorHook{salt: salt}(IPoolManager(address(manager)), feeBps, quote);
+        h = new AntifragileFloorHook{salt: salt}(
+            IPoolManager(address(manager)), feeBps, quote, expectedToken, SQRT_PRICE_1_1, TS
+        );
         require(address(h) == addr, "mine");
     }
 
@@ -160,14 +165,14 @@ contract AntifragileTwoPoolInvariant is Test, Deployers {
         (Currency a0, Currency a1) = _mkPair(4000e18);
         quoteA = a1;
         tknA = a0;
-        hookA = _deploy(3000, quoteA);
+        hookA = _deploy(3000, quoteA, Currency.unwrap(tknA));
         (keyA, idA) = _initAndSeed(hookA, a0, a1, quoteA);
 
         // Pool B currencies (a completely different pair).
         (Currency b0, Currency b1) = _mkPair(5000e18);
         quoteB = b1;
         tknB = b0;
-        hookB = _deploy(500, quoteB);
+        hookB = _deploy(500, quoteB, Currency.unwrap(tknB));
         (keyB, idB) = _initAndSeed(hookB, b0, b1, quoteB);
 
         bool sellA0 = (tknA == keyA.currency0);
